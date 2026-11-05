@@ -1,0 +1,108 @@
+
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>{% block title %}Regional Income Analysis{% endblock %}</title>
+
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+
+<body>
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+
+        <div class="brand">
+            <h2>RIA</h2>
+            <p>Regional Income Analysis</p>
+        </div>
+
+        <div class="menu">
+
+            <p class="menu-title">MENU UTAMA</p>
+
+            <a href="{{ url_for('dashboard') }}"
+                class="menu-item {% if active_page == 'dashboard' %}active{% endif %}">
+                    Dashboard
+            </a>
+
+            <a href="{{ url_for('import_data') }}"
+                class="menu-item {% if active_page == 'import' %}active{% endif %}">
+                Import Data BPS
+            </a>
+
+            <a href="{{ url_for('data_pendapatan') }}"
+               class="menu-item {% if active_page == 'data' %}active{% endif %}">
+                Data Pendapatan
+            </a>
+
+            <a href="{{ url_for('analisis') }}"
+               class="menu-item {% if active_page == 'analisis' %}active{% endif %}">
+                Analisis Disparitas
+            </a>
+
+            <a href="{{ url_for('visualisasi') }}"
+               class="menu-item {% if active_page == 'visualisasi' %}active{% endif %}">
+                Visualisasi
+            </a>
+
+            <a href="{{ url_for('tentang') }}"
+               class="menu-item {% if active_page == 'tentang' %}active{% endif %}">
+                Tentang Aplikasi
+            </a>
+
+        </div>
+
+        <div class="sidebar-footer">
+            <p>Academic Research Project</p>
+            <small>Version 1.0</small>
+        </div>
+
+    </aside>
+
+
+    <!-- MAIN CONTENT -->
+    <main class="main-content">
+
+        <header class="topbar">
+
+            <div>
+                <h2>{{ page_heading }}</h2>
+
+                <p>
+                    Analisis Disparitas Pendapatan Regional
+                </p>
+            </div>
+
+        </header>
+
+
+        <section class="content">
+
+            {% block content %}
+            {% endblock %}
+
+        </section>
+
+
+        <footer class="footer">
+
+            <p>
+                © 2026 Regional Income Analysis.
+                Academic Research Project.
+            </p>
+
+        </footer>
+
+    </main>
+
+
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+
+</body>
+</html>

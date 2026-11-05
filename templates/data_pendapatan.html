@@ -1,0 +1,182 @@
+
+{% extends "base.html" %}
+
+{% block title %}
+Data Pendapatan - Regional Income Analysis
+{% endblock %}
+
+{% block content %}
+
+<div class="welcome">
+    <h1>Data Pendapatan Regional</h1>
+
+    <p>
+        Menampilkan dan mengelola data pendapatan
+        regional berdasarkan wilayah dan tahun.
+    </p>
+</div>
+
+<!-- INFORMASI DATASET -->
+
+<div class="stats-grid">
+
+    <div class="stat-card">
+        <p>Total Wilayah</p>
+        <h2>{{ total_wilayah }}</h2>
+        <small>Jumlah wilayah dalam dataset</small>
+    </div>
+
+    <div class="stat-card">
+        <p>Total Tahun</p>
+        <h2>{{ total_tahun }}</h2>
+        <small>Jumlah tahun pengamatan</small>
+    </div>
+
+    <div class="stat-card">
+        <p>Total Data</p>
+        <h2>{{ total_data }}</h2>
+        <small>Jumlah seluruh baris data</small>
+    </div>
+
+    <div class="stat-card">
+        <p>Status Dataset</p>
+
+        {% if total_data > 0 %}
+            <h2>Siap</h2>
+            <small>Dataset berhasil dimuat</small>
+        {% else %}
+            <h2>Belum</h2>
+            <small>Menunggu import data</small>
+        {% endif %}
+    </div>
+
+</div>
+
+<!-- TABEL DATA -->
+
+<div class="research-card">
+
+    <div class="table-header">
+
+        <div>
+            <h3>Dataset Pendapatan Regional</h3>
+
+            <p>
+                Daftar pendapatan berdasarkan wilayah dan tahun.
+            </p>
+        </div>
+
+        {% if total_data > 0 %}
+
+            <form action="{{ url_for('hapus_semua_data') }}"
+                  method="POST"
+                  onsubmit="return confirm('Apakah kamu yakin ingin menghapus SELURUH dataset? Tindakan ini tidak dapat dibatalkan.');">
+
+                <button type="submit"
+                        class="btn-upload"
+                        style="background-color: #dc3545;">
+                    Hapus Semua Data
+                </button>
+
+            </form>
+
+        {% endif %}
+
+    </div>
+
+    <div class="table-container">
+
+        <table class="data-table">
+
+            <thead>
+                <tr>
+                    <th>No.</th>
+                    <th>Nama Wilayah</th>
+                    <th>Tahun</th>
+                    <th>PDRB Per Kapita</th>
+                    <th>Jumlah Penduduk</th>
+                    <th>Aksi</th>
+                </tr>
+            </thead>
+
+            <tbody>
+
+                {% if data %}
+
+                    {% for row in data %}
+
+                    <tr>
+                        <td>{{ loop.index }}</td>
+
+                        <td>{{ row["Nama Wilayah"] }}</td>
+
+                        <td>{{ row["Tahun"] }}</td>
+
+                        <td>
+                            {{ "{:,.0f}".format(row["PDRB Per Kapita"]) }}
+                        </td>
+
+                        <td>
+                            {{ "{:,.0f}".format(row["Jumlah Penduduk"]) }}
+                        </td>
+
+                        
+<td>
+    <div style="display: flex; gap: 8px;">
+
+        <!-- TOMBOL EDIT -->
+        <a href="{{ url_for('edit_data', index=loop.index0) }}"
+           class="btn-upload"
+           style="background-color: #2878b5; text-decoration: none;">
+            Edit
+        </a>
+
+        <!-- TOMBOL HAPUS -->
+        <form action="{{ url_for('hapus_data', index=loop.index0) }}"
+              method="POST"
+              onsubmit="return confirm('Yakin ingin menghapus data wilayah ini?');">
+
+            <button type="submit"
+                    class="btn-upload"
+                    style="background-color: #dc3545;">
+                Hapus
+            </button>
+
+        </form>
+
+    </div>
+</td>
+
+
+                    </tr>
+
+                    {% endfor %}
+
+                {% else %}
+
+                    <tr>
+                        <td colspan="6" class="empty-data">
+
+                            <div class="empty-icon">—</div>
+
+                            <strong>Belum Ada Data</strong>
+
+                            <p>
+                                Silakan import dataset BPS
+                                atau masukkan data secara manual.
+                            </p>
+
+                        </td>
+                    </tr>
+
+                {% endif %}
+
+            </tbody>
+
+        </table>
+
+    </div>
+
+</div>
+
+{% endblock %}

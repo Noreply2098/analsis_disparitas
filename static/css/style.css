@@ -1,0 +1,563 @@
+
+/* =================================
+   1. PENGATURAN DASAR
+================================= */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: "Segoe UI", Arial, sans-serif;
+    background-color: #f4f7fb;
+    color: #26364a;
+}
+
+
+/* =================================
+   2. SIDEBAR
+================================= */
+
+.sidebar {
+    width: 260px;
+    height: 100vh;
+    background-color: #173b65;
+    color: white;
+
+    position: fixed;
+    top: 0;
+    left: 0;
+
+    padding: 28px 20px;
+    display: flex;
+    flex-direction: column;
+}
+
+.brand {
+    padding-bottom: 30px;
+    border-bottom: 1px solid #36577a;
+}
+
+.brand h2 {
+    font-size: 28px;
+    letter-spacing: 2px;
+    margin-bottom: 5px;
+}
+
+.brand p {
+    font-size: 12px;
+    color: #c5d5e8;
+}
+
+
+/* =================================
+   3. MENU SIDEBAR
+================================= */
+
+.menu {
+    margin-top: 35px;
+}
+
+.menu-title {
+    font-size: 11px;
+    color: #a9bfd7;
+    font-weight: bold;
+    margin-bottom: 15px;
+    letter-spacing: 1px;
+}
+
+.menu-item {
+    display: block;
+    text-decoration: none;
+    color: #dce8f5;
+
+    padding: 13px 15px;
+    margin-bottom: 8px;
+
+    border-radius: 8px;
+    font-size: 14px;
+
+    transition: 0.3s;
+}
+
+.menu-item:hover {
+    background-color: #294f79;
+    color: white;
+}
+
+.menu-item.active {
+    background-color: #ffffff;
+    color: #173b65;
+    font-weight: bold;
+}
+
+
+/* =================================
+   4. SIDEBAR FOOTER
+================================= */
+
+.sidebar-footer {
+    margin-top: auto;
+    border-top: 1px solid #36577a;
+    padding-top: 20px;
+    color: #c5d5e8;
+}
+
+.sidebar-footer p {
+    font-size: 12px;
+    margin-bottom: 5px;
+}
+
+.sidebar-footer small {
+    font-size: 11px;
+}
+
+
+/* =================================
+   5. KONTEN UTAMA
+================================= */
+
+.main-content {
+    margin-left: 260px;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+
+/* =================================
+   6. HEADER
+================================= */
+
+.topbar {
+    background-color: white;
+    padding: 22px 35px;
+    border-bottom: 1px solid #e5eaf1;
+}
+
+.topbar h2 {
+    font-size: 21px;
+    color: #173b65;
+    margin-bottom: 5px;
+}
+
+.topbar p {
+    font-size: 13px;
+    color: #8290a2;
+}
+
+
+/* =================================
+   7. AREA KONTEN
+================================= */
+
+.content {
+    padding: 30px 35px;
+    flex: 1;
+}
+
+.welcome {
+    margin-bottom: 30px;
+}
+
+.welcome h1 {
+    color: #173b65;
+    font-size: 25px;
+    margin-bottom: 8px;
+}
+
+.welcome p {
+    color: #718096;
+    font-size: 14px;
+}
+
+
+/* =================================
+   8. KARTU STATISTIK
+================================= */
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 20px;
+    margin-bottom: 25px;
+}
+
+.stat-card {
+    background-color: white;
+    padding: 22px;
+    border-radius: 12px;
+
+    border: 1px solid #e7edf4;
+    border-left: 4px solid #2f6fae;
+
+    box-shadow: 0 3px 12px rgba(20, 50, 80, 0.04);
+}
+
+.stat-card p {
+    font-size: 13px;
+    color: #718096;
+    margin-bottom: 15px;
+}
+
+.stat-card h2 {
+    font-size: 25px;
+    color: #173b65;
+    margin-bottom: 8px;
+}
+
+.stat-card small {
+    font-size: 11px;
+    color: #96a2b1;
+}
+
+
+/* =================================
+   9. KARTU INFORMASI PENELITIAN
+================================= */
+
+.research-card {
+    background-color: white;
+    border: 1px solid #e7edf4;
+    border-radius: 12px;
+
+    padding: 25px;
+    margin-bottom: 25px;
+
+    box-shadow: 0 3px 12px rgba(20, 50, 80, 0.04);
+}
+
+.research-card h3 {
+    font-size: 17px;
+    color: #173b65;
+    margin-bottom: 15px;
+}
+
+.research-card p {
+    color: #718096;
+    font-size: 14px;
+    line-height: 1.8;
+    margin-bottom: 8px;
+}
+
+
+/* =================================
+   10. ALUR ANALISIS
+================================= */
+
+.workflow {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 15px;
+}
+
+.workflow-item {
+    background-color: #f0f5fb;
+    border: 1px solid #dce7f3;
+    border-radius: 10px;
+
+    padding: 20px 15px;
+    text-align: center;
+}
+
+.workflow-item span {
+    display: inline-block;
+    background-color: #173b65;
+    color: white;
+
+    width: 35px;
+    height: 35px;
+    line-height: 35px;
+
+    border-radius: 50%;
+    font-size: 12px;
+    font-weight: bold;
+
+    margin-bottom: 12px;
+}
+
+.workflow-item p {
+    color: #345777;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+
+/* =================================
+   11. FOOTER
+================================= */
+
+.footer {
+    padding: 20px 35px;
+    border-top: 1px solid #e5eaf1;
+    background-color: white;
+}
+
+.footer p {
+    font-size: 12px;
+    color: #96a2b1;
+}
+
+
+/* =================================
+   12. RESPONSIVE
+================================= */
+
+@media (max-width: 1100px) {
+
+    .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+}
+
+@media (max-width: 700px) {
+
+    .sidebar {
+        width: 190px;
+    }
+
+    .main-content {
+        margin-left: 190px;
+    }
+
+    .content {
+        padding: 20px;
+    }
+
+    .stats-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .workflow {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+}
+
+
+/* IMPORT DATA */
+
+.upload-area {
+    background-color: #f4f8fd;
+    border: 2px dashed #9bb8d5;
+    border-radius: 12px;
+
+    padding: 45px 20px;
+    margin-top: 25px;
+
+    text-align: center;
+}
+
+.upload-area h3 {
+    color: #173b65;
+    margin-bottom: 10px;
+}
+
+.upload-area p {
+    color: #718096;
+    font-size: 13px;
+}
+
+.upload-area input {
+    margin-top: 10px;
+    padding: 10px;
+}
+
+
+/* =================================
+   DATA PENDAPATAN
+================================= */
+
+.table-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 25px;
+}
+
+.table-header h3 {
+    color: #173b65;
+    margin-bottom: 8px;
+}
+
+.table-header p {
+    color: #718096;
+    font-size: 13px;
+}
+
+.dataset-badge {
+    background-color: #edf3fa;
+    color: #345777;
+    padding: 8px 13px;
+    border-radius: 20px;
+    font-size: 11px;
+    white-space: nowrap;
+}
+
+.table-container {
+    width: 100%;
+    overflow-x: auto;
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.data-table thead {
+    background-color: #edf3fa;
+}
+
+.data-table th {
+    padding: 15px;
+    text-align: left;
+    color: #173b65;
+    font-weight: 600;
+    border-bottom: 1px solid #dce7f3;
+}
+
+.data-table td {
+    padding: 15px;
+    border-bottom: 1px solid #e7edf4;
+}
+
+.empty-data {
+    text-align: center !important;
+    padding: 50px 20px !important;
+    color: #718096;
+}
+
+.empty-icon {
+    font-size: 35px;
+    color: #9bb8d5;
+    margin-bottom: 10px;
+}
+
+.empty-data strong {
+    color: #345777;
+    display: block;
+    margin-bottom: 8px;
+}
+
+.empty-data p {
+    font-size: 12px;
+    color: #96a2b1;
+}
+
+/* TOMBOL UPLOAD DATASET */
+
+.btn-upload {
+    background-color: #1e5a91;
+    color: white;
+    border: none;
+    padding: 12px 25px;
+    border-radius: 7px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: 0.2s;
+}
+
+.btn-upload:hover {
+    background-color: #173b65;
+}
+
+
+/* =====================================
+   RINGKASAN ANALISIS WILLIAMSON
+===================================== */
+
+.stat-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 18px;
+    margin-top: 20px;
+}
+
+.stat-grid .stat-card {
+    min-width: 0;
+    padding: 22px;
+    border: 1px solid #e2eaf3;
+    border-left: 4px solid #2874b8;
+    border-radius: 12px;
+    background: #ffffff;
+    box-shadow: 0 3px 10px rgba(20, 55, 90, 0.04);
+}
+
+.stat-grid .stat-card p {
+    margin-bottom: 12px;
+    color: #718096;
+    font-size: 13px;
+}
+
+.stat-grid .stat-card h2 {
+    margin: 0;
+    color: #173f68;
+    font-size: 23px;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+}
+
+
+/* =====================================
+   TABEL RINCIAN PERHITUNGAN
+===================================== */
+
+.research-card table {
+    width: 100%;
+    min-width: 1050px;
+    border-collapse: collapse;
+    margin-top: 18px;
+}
+
+.research-card table thead {
+    background: #edf4fb;
+}
+
+.research-card table th {
+    padding: 15px 12px;
+    color: #173f68;
+    font-size: 12px;
+    font-weight: 700;
+    text-align: left;
+    white-space: nowrap;
+    border-bottom: 2px solid #dce7f2;
+}
+
+.research-card table td {
+    padding: 14px 12px;
+    color: #46566a;
+    font-size: 12px;
+    border-bottom: 1px solid #edf0f4;
+    white-space: nowrap;
+}
+
+.research-card table tbody tr:hover {
+    background: #f5f9fd;
+}
+
+.research-card table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+
+/* =====================================
+   RESPONSIVE / TAMPILAN MOBILE
+===================================== */
+
+@media (max-width: 900px) {
+
+    .stat-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .stat-grid .stat-card h2 {
+        font-size: 20px;
+    }
+
+}

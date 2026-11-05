@@ -1,0 +1,210 @@
+
+{% extends "base.html" %}
+
+{% block title %}
+Input Data Manual - Regional Income Analysis
+{% endblock %}
+
+{% block content %}
+{% if message %}
+<script>
+    alert("{{ message }}");
+</script>
+{% endif %}
+
+<div class="welcome">
+    <h1>Input Data Manual</h1>
+
+    <p>
+        Masukkan data pendapatan regional secara manual
+        untuk keperluan analisis ketimpangan pendapatan.
+    </p>
+</div>
+
+<div class="research-card">
+
+    <div class="table-header">
+        <div>
+            <h3>Formulir Data Regional</h3>
+
+            <p>
+                Masukkan informasi setiap wilayah berdasarkan tahun pengamatan.
+            </p>
+        </div>
+    </div>
+    <form action="{{ url_for('input_manual') }}" method="POST">
+    <div class="table-container">
+
+        <table class="data-table">
+
+            <thead>
+    <tr>
+        <th>No.</th>
+        <th>Nama Wilayah</th>
+        <th>Tahun</th>
+        <th>PDRB Per Kapita (Rp)</th>
+        <th>Jumlah Penduduk</th>
+        <th>Aksi</th>
+    </tr>
+</thead>
+
+            
+
+<tbody id="manual-table-body">
+
+    <tr>
+        <td>1</td>
+
+        <td>
+            <input type="text"
+                   name="nama_wilayah[]"
+                   placeholder="Nama wilayah"
+                   required>
+        </td>
+
+        <td>
+            <input type="number"
+                   name="tahun[]"
+                   placeholder="2024"
+                   required>
+        </td>
+
+        <td>
+            <input type="number"
+                   name="pdrb[]"
+                   placeholder="39000000"
+                   min="0"
+                   required>
+        </td>
+
+        <td>
+            <input type="number"
+                   name="penduduk[]"
+                   placeholder="208000"
+                   min="1"
+                   required>
+        </td>
+
+        <td>
+            <button type="button"
+                    class="btn-upload"
+                    onclick="removeRow(this)">
+                Hapus
+            </button>
+        </td>
+    </tr>
+
+</tbody>
+
+
+
+        </table>
+
+    </div>
+<br>
+
+<button type="button"
+        class="btn-upload"
+        onclick="addRow()">
+    + Tambah Baris
+</button>
+<br><br>
+
+<button type="submit" class="btn-upload">
+    Simpan Data
+</button>
+</form>
+</div>
+
+
+<script>
+
+function addRow() {
+
+    const tableBody = document.getElementById("manual-table-body");
+
+    const rowCount = tableBody.rows.length + 1;
+
+    const newRow = document.createElement("tr");
+
+    newRow.innerHTML = `
+        <td>${rowCount}</td>
+
+        <td>
+            <input type="text"
+                   name="nama_wilayah[]"
+                   placeholder="Nama wilayah"
+                   required>
+        </td>
+
+        <td>
+            <input type="number"
+                   name="tahun[]"
+                   placeholder="2024"
+                   required>
+        </td>
+
+        <td>
+            <input type="number"
+                   name="pdrb[]"
+                   placeholder="39000000"
+                   min="0"
+                   required>
+        </td>
+
+        <td>
+            <input type="number"
+                   name="penduduk[]"
+                   placeholder="208000"
+                   min="1"
+                   required>
+        </td>
+
+        <td>
+            <button type="button"
+                    class="btn-upload"
+                    onclick="removeRow(this)">
+                Hapus
+            </button>
+        </td>
+    `;
+
+    tableBody.appendChild(newRow);
+
+}
+
+
+function removeRow(button) {
+
+    const tableBody = document.getElementById("manual-table-body");
+
+    if (tableBody.rows.length <= 1) {
+        alert("Minimal harus ada satu baris data.");
+        return;
+    }
+
+    button.closest("tr").remove();
+
+    updateRowNumbers();
+
+}
+
+
+function updateRowNumbers() {
+
+    const tableBody = document.getElementById("manual-table-body");
+
+    for (let i = 0; i < tableBody.rows.length; i++) {
+
+        tableBody.rows[i].cells[0].textContent = i + 1;
+
+    }
+
+}
+
+</script>
+
+{% endblock %}
+
+
+

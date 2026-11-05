@@ -1,0 +1,97 @@
+
+{% extends "base.html" %}
+
+{% block title %}
+Edit Data - Regional Income Analysis
+{% endblock %}
+
+{% block content %}
+
+<div class="welcome">
+    <h1>Edit Data Pendapatan</h1>
+
+    <p>
+        Perbarui informasi data pendapatan regional
+        yang sudah tersimpan.
+    </p>
+</div>
+
+<div class="research-card">
+
+    <div class="table-header">
+        <div>
+            <h3>Formulir Edit Data Regional</h3>
+
+            <p>
+                Silakan ubah informasi sesuai data yang benar.
+            </p>
+        </div>
+    </div>
+
+    <form method="POST">
+
+        <div class="form-group">
+            <label>Nama Wilayah</label>
+
+            <input
+                type="text"
+                name="nama_wilayah"
+                value="{{ row['Nama Wilayah'] }}"
+                required
+            >
+        </div>
+
+        <div class="form-group">
+            <label>Tahun</label>
+
+            <input
+                type="number"
+                name="tahun"
+                value="{{ row['Tahun'] }}"
+                min="1900"
+                max="2100"
+                required
+            >
+        </div>
+
+        <div class="form-group">
+            <label>PDRB Per Kapita (Rp)</label>
+
+            <input
+                type="number"
+                name="pdrb"
+                value="{{ row['PDRB Per Kapita'] }}"
+                min="0"
+                required
+            >
+        </div>
+
+        <div class="form-group">
+            <label>Jumlah Penduduk</label>
+
+            <input
+                type="number"
+                name="penduduk"
+                value="{{ row['Jumlah Penduduk'] }}"
+                min="1"
+                required
+            >
+        </div>
+
+        <br>
+
+        <button type="submit" class="btn-upload">
+            Simpan Perubahan
+        </button>
+
+        <a href="{{ url_for('data_pendapatan') }}"
+           class="btn-upload"
+           style="background-color: #6c757d; text-decoration: none;">
+            Batal
+        </a>
+
+    </form>
+
+</div>
+
+{% endblock %}

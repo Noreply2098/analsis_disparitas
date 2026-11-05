@@ -1,0 +1,75 @@
+
+{% extends "base.html" %}
+
+{% block title %}
+Import Data BPS - Regional Income Analysis
+{% endblock %}
+
+{% block content %}
+{% if message %}
+<div class="research-card">
+    <p>{{ message }}</p>
+</div>
+{% endif %}
+
+<div class="welcome">
+
+    <h1>Import Data BPS</h1>
+
+    <p>
+        Import data pendapatan regional dari file
+        Excel atau CSV untuk diproses lebih lanjut.
+    </p>
+
+</div>
+
+
+<div class="research-card">
+
+    <h3>Unggah Dataset</h3>
+
+    <p>
+        Silakan pilih file dataset yang akan digunakan
+        dalam penelitian analisis disparitas pendapatan regional.
+    </p>
+
+    <div class="upload-area">
+
+        <h3>Pilih File Dataset</h3>
+
+        <p>
+            Format yang didukung: Excel (.xlsx) dan CSV (.csv)
+        </p>
+
+        <br>
+
+        <form action="{{ url_for('import_data') }}"
+      method="POST"
+      enctype="multipart/form-data">
+
+    <input
+        type="file"
+        name="file"
+        accept=".xlsx,.csv"
+        required
+    >
+
+    <br><br>
+
+    <button type="submit" class="btn-upload">
+        Upload Dataset
+    </button>
+    
+    <br><br>
+
+<a href="{{ url_for('input_manual') }}" class="btn-upload">
+    Input Data Manual
+</a>
+
+</form>
+
+    </div>
+
+</div>
+
+{% endblock %}
