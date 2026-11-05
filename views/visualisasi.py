@@ -1,5 +1,5 @@
+import altair as alt
 import streamlit as st
-from matplotlib.figure import Figure
 
 from utils import (
     COL_PENDUDUK, COL_PDRB, COL_WILAYAH,
@@ -11,34 +11,42 @@ page_header(
     "Grafik PDRB per kapita, jumlah penduduk, dan perkembangan Indeks Williamson.",
 )
 
+TINGGI = 340
 
-def grafik_batang(data, kolom, judul, label_y, warna):
-    fig = Figure(figsize=(10, 5))
-    ax = fig.subplots()
-    ax.bar(data[COL_WILAYAH], data[kolom], color=warna, width=0.6)
-    ax.set_title(judul)
-    ax.set_xlabel("Nama Wilayah")
-    ax.set_ylabel(label_y)
-    for label in ax.get_xticklabels():
-        label.set_rotation(30)
-        label.set_ha("right")
-    ax.grid(axis="y", linestyle="--", alpha=0.3)
-    fig.tight_layout()
-    return fig
+
+def grafik_batang(data, kolom, label_y, warna):
+    return (
+        alt.Chart(data[[COL_WILAYAH, kolom]])
+        .mark_bar(color=warna)
+        .encode(
+            x=alt.X(
+                f"{COL_WILAYAH}:N", sort=None, title="Nama Wilayah",
+                axis=alt.Axis(labelAngle=-45, labelLimit=160),
+            ),
+            y=alt.Y(f"{kolom}:Q", title=label_y, axis=alt.Axis(format="~s")),
+            tooltip=[
+                alt.Tooltip(f"{COL_WILAYAH}:N", title="Wilayah"),
+                alt.Tooltip(f"{kolom}:Q", title=label_y, format=",.0f"),
+            ],
+        )
+        .properties(height=TINGGI)
+    )
 
 
 def grafik_tren(tren):
-    fig = Figure(figsize=(10, 5))
-    ax = fig.subplots()
-    ax.plot(tren["Tahun"], tren["Indeks Williamson"], marker="o",
-            color="#2874B8", linewidth=2.5, markersize=8)
-    ax.set_title("Perkembangan Indeks Williamson Antarwaktu")
-    ax.set_xlabel("Tahun")
-    ax.set_ylabel("Indeks Williamson")
-    ax.set_xticks(tren["Tahun"])
-    ax.grid(linestyle="--", alpha=0.3)
-    fig.tight_layout()
-    return fig
+    return (
+        alt.Chart(tren)
+        .mark_line(point=alt.OverlayMarkDef(size=90), color="#2874B8", strokeWidth=3)
+        .encode(
+            x=alt.X("Tahun:O", title="Tahun", axis=alt.Axis(labelAngle=0)),
+            y=alt.Y("Indeks Williamson:Q", title="Indeks Williamson"),
+            tooltip=[
+                alt.Tooltip("Tahun:O", title="Tahun"),
+                alt.Tooltip("Indeks Williamson:Q", format=".4f"),
+            ],
+        )
+        .properties(height=TINGGI)
+    )
 
 
 df, pesan = load_dataset()
@@ -67,21 +75,18 @@ if df_pdrb.empty and df_penduduk.empty:
 
 if not df_pdrb.empty:
     with st.container(border=True):
-        st.pyplot(grafik_batang(
-            df_pdrb, COL_PDRB,
-            f"PDRB Per Kapita Antarwilayah Tahun {tahun}",
-            "PDRB Per Kapita", "#2874B8",
-        ))
+        st.subheader(f"PDRB Per Kapita Antarwilayah Tahun {tahun}")
+        st.altair_chart(grafik_batang(df_pdrb, COL_PDRB, "PDRB Per Kapita", "#2874B8"))
 
 if not df_penduduk.empty:
     with st.container(border=True):
-        st.pyplot(grafik_batang(
-            df_penduduk, COL_PENDUDUK,
-            f"Jumlah Penduduk Antarwilayah Tahun {tahun}",
-            "Jumlah Penduduk (Jiwa)", "#4C9BE8",
-        ))
+        st.subheader(f"Jumlah Penduduk Antarwilayah Tahun {tahun}")
+        st.altair_chart(
+            grafik_batang(df_penduduk, COL_PENDUDUK, "Jumlah Penduduk (Jiwa)", "#4C9BE8")
+        )
 
 tren = tren_williamson(df)
 if not tren.empty:
     with st.container(border=True):
-        st.pyplot(grafik_tren(tren))
+        st.subheader("Perkembangan Indeks Williamson Antarwaktu")
+        st.altair_chart(grafik_tren(tren))

@@ -21,11 +21,15 @@ with st.container(border=True):
         "dengan metode Indeks Williamson untuk mengukur tingkat disparitas "
         "pendapatan regional."
     )
-    kolom = st.columns(4)
-    kolom[0].metric("Versi", "1.0")
-    kolom[1].metric("Platform", "Web")
-    kolom[2].metric("Bidang", "Ekonomi Regional")
-    kolom[3].metric("Metode", "Indeks Williamson")
+    ringkas = [
+        ("Versi", "1.0"),
+        ("Platform", "Web"),
+        ("Bidang", "Ekonomi Regional"),
+        ("Metode", "Indeks Williamson"),
+    ]
+    for kol, (label, nilai) in zip(st.columns(4), ringkas):
+        kol.caption(label)
+        kol.markdown(f"#### {nilai}")
 
 # ---- Tujuan ----
 with st.container(border=True):
@@ -117,7 +121,7 @@ with st.container(border=True):
         ("Python", "Bahasa pemrograman utama"),
         ("Streamlit", "Antarmuka web"),
         ("Pandas", "Pengolahan data"),
-        ("Matplotlib", "Pembuatan grafik"),
+        ("Altair", "Pembuatan grafik interaktif"),
     ]
     for kol, (nama, ket) in zip(st.columns(4), teknologi):
         kol.markdown(f"**{nama}**")

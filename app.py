@@ -11,6 +11,37 @@ st.set_page_config(
     layout="wide",
 )
 
+st.html(
+    """
+    <style>
+    /* Teks metrik tidak boleh terpotong (...) - biarkan turun ke baris berikutnya */
+    [data-testid="stMetricLabel"] *,
+    [data-testid="stMetricValue"] * {
+        white-space: normal !important;
+        overflow: visible !important;
+        text-overflow: clip !important;
+        overflow-wrap: anywhere;
+    }
+    [data-testid="stMetricValue"] { line-height: 1.25; }
+
+    /* Tampilan layar kecil (HP) */
+    @media (max-width: 640px) {
+        .block-container {
+            padding: 3.5rem 0.9rem 4rem 0.9rem !important;
+        }
+        h1 { font-size: 1.7rem !important; line-height: 1.25 !important; }
+        h2, h3 { font-size: 1.3rem !important; line-height: 1.3 !important; }
+        [data-testid="stMetricValue"] { font-size: 1.6rem !important; }
+        [data-testid="stVerticalBlockBorderWrapper"] { padding: 0.25rem; }
+        .stButton > button, .stDownloadButton > button {
+            width: 100%;
+            min-height: 2.75rem;
+        }
+    }
+    </style>
+    """
+)
+
 halaman = st.navigation(
     {
         "MENU UTAMA": [

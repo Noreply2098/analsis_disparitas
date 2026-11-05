@@ -55,7 +55,8 @@ with st.container(border=True):
 with st.container(border=True):
     st.subheader("Rincian Perhitungan Indeks Williamson")
     st.caption(
-        "Detail perhitungan ketimpangan PDRB per kapita berdasarkan masing-masing wilayah."
+        "Detail perhitungan ketimpangan PDRB per kapita berdasarkan masing-masing wilayah. "
+        "Geser tabel ke samping untuk melihat semua kolom."
     )
 
     rincian = hasil.detail.drop(columns=["Tahun"]).reset_index(drop=True)
@@ -71,4 +72,7 @@ with st.container(border=True):
             "Selisih Kuadrat": "{:,.2f}",
             "Kontribusi": "{:,.2f}",
         }),
+        column_config={
+            kol: st.column_config.Column(width="medium") for kol in rincian.columns
+        },
     )

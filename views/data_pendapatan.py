@@ -31,7 +31,8 @@ with st.container(border=True):
     st.caption(
         "Klik sel untuk mengubah nilai. Tambah baris lewat baris paling bawah; "
         "hapus baris dengan memilihnya lalu menekan ikon tempat sampah / tombol Delete. "
-        "Perubahan baru tersimpan setelah menekan **Simpan Perubahan**."
+        "Perubahan baru tersimpan setelah menekan **Simpan Perubahan**. "
+        "Di HP, geser tabel ke samping untuk melihat semua kolom."
     )
 
     hasil_edit = st.data_editor(
@@ -39,11 +40,13 @@ with st.container(border=True):
         num_rows="dynamic",
         key="editor_data",
         column_config={
-            COL_WILAYAH: st.column_config.TextColumn("Nama Wilayah", required=True),
-            COL_TAHUN: st.column_config.NumberColumn("Tahun", step=1, format="%d"),
-            COL_PDRB: st.column_config.NumberColumn("PDRB Per Kapita", min_value=0, format="%d"),
+            COL_WILAYAH: st.column_config.TextColumn("Nama Wilayah", required=True, width="medium"),
+            COL_TAHUN: st.column_config.NumberColumn("Tahun", step=1, format="%d", width="small"),
+            COL_PDRB: st.column_config.NumberColumn(
+                "PDRB Per Kapita", min_value=0, format="%d", width="medium"
+            ),
             COL_PENDUDUK: st.column_config.NumberColumn(
-                "Jumlah Penduduk", min_value=1, step=1, format="%d"
+                "Jumlah Penduduk", min_value=1, step=1, format="%d", width="medium"
             ),
         },
     )
