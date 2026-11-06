@@ -1,9 +1,5 @@
-import numpy as np
 import streamlit as st
 
-from charts import (
-    BIRU_TUA, grafik_batang, grafik_indikator, grafik_selisih,
-)
 from laporan import blok_cetak
 from utils import (
     COL_PENDUDUK, COL_PDRB, COL_WILAYAH,
@@ -77,13 +73,13 @@ with st.container(border=True):
     else:
         st.error(pesan_kategori)
 
-    st.altair_chart(grafik_indikator(hasil.indeks))
     st.caption(
         "Kategori pada aplikasi ini: rendah (< 0,3), sedang (0,3 – 0,5), "
         "tinggi (> 0,5). Semakin besar nilai indeks, semakin timpang PDRB per "
         "kapita antarwilayah."
     )
     st.write(narasi_ringkasan(a))
+    st.caption("Grafik posisi, kontribusi, dan perkembangan indeks tersedia di halaman Visualisasi.")
 
 # ==============================
 # RINGKASAN PERHITUNGAN
@@ -118,30 +114,7 @@ with st.container(border=True):
 # ==============================
 with st.container(border=True):
     st.subheader("Analisis Per Wilayah")
-    tab_posisi, tab_kontribusi, tab_rincian, tab_langkah = st.tabs(
-        ["Posisi", "Kontribusi", "Rincian", "Langkah"]
-    )
-
-    # ---- Posisi terhadap rata-rata ----
-    with tab_posisi:
-        st.caption(
-            f"Selisih PDRB per kapita setiap wilayah terhadap rata-rata "
-            f"({hasil.rata_rata:,.2f}). Biru berarti di atas rata-rata, "
-            f"oranye di bawah rata-rata."
-        )
-        st.altair_chart(grafik_selisih(detail))
-
-    # ---- Kontribusi terhadap ketimpangan ----
-    with tab_kontribusi:
-        st.caption(
-            "Porsi tiap wilayah terhadap total ketimpangan, dihitung dari "
-            "proporsi penduduk × selisih kuadrat terhadap rata-rata. Wilayah "
-            "yang jauh dari rata-rata dan berpenduduk besar menyumbang lebih banyak."
-        )
-        st.altair_chart(grafik_batang(
-            detail, "Porsi Kontribusi", "Porsi Kontribusi", BIRU_TUA,
-            label_fn=lambda v: f"{v:.1%}", format_tooltip=".2%",
-        ))
+    tab_rincian, tab_langkah = st.tabs(["Rincian", "Langkah"])
 
     # ---- Rincian tabel ----
     with tab_rincian:

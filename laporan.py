@@ -171,7 +171,6 @@ def bagian_analisis(df, tahun: int) -> str:
         f'<div class="status status-{kelas}">{_e(a.kategori)} pada tahun {tahun}</div>',
         delta,
         "</div>",
-        _gambar(grafik_indikator(h.indeks), 650),
         '<p class="ket">Kategori pada aplikasi ini: rendah (&lt; 0,3), sedang (0,3 – 0,5), '
         "tinggi (&gt; 0,5). Semakin besar nilai indeks, semakin timpang PDRB per kapita antarwilayah.</p>",
         f"<p>{_tebal(narasi_ringkasan(a))}</p>",
@@ -194,23 +193,6 @@ def bagian_analisis(df, tahun: int) -> str:
         sel("Selisih Tertinggi–Terendah", f"{a.tertinggi[COL_PDRB] - a.terendah[COL_PDRB]:,.0f}"),
         sel("Rasio Tertinggi/Terendah", f"{a.rasio:.2f}×" if a.rasio else "—"),
         "</div>",
-    ]
-
-    # ---- posisi & kontribusi ----
-    out += [
-        "<h2>Posisi Terhadap Rata-rata</h2>",
-        _gambar(
-            grafik_selisih(d, langkah=38), 480,
-            ket=f"Selisih PDRB per kapita setiap wilayah terhadap rata-rata ({h.rata_rata:,.2f}).",
-        ),
-        "<h2>Kontribusi Terhadap Ketimpangan</h2>",
-        _gambar(
-            grafik_batang(d, "Porsi Kontribusi", "Porsi Kontribusi", BIRU_TUA,
-                          label_fn=lambda v: f"{v:.1%}", format_tooltip=".2%", langkah=38),
-            500,
-            ket="Porsi tiap wilayah terhadap total ketimpangan "
-                "(proporsi penduduk × selisih kuadrat terhadap rata-rata).",
-        ),
     ]
 
     # ---- tabel rincian ----
@@ -296,6 +278,25 @@ def bagian_grafik(df, tahun: int) -> str:
             grafik_batang(df_penduduk, COL_PENDUDUK, "Jumlah Penduduk (Jiwa)", BIRU, langkah=38),
             500, f"Jumlah Penduduk Antarwilayah Tahun {tahun}",
             "Label disingkat: rb = ribu, jt = juta, M = miliar.",
+        ))
+
+    if a:
+        out.append(_gambar(
+            grafik_selisih(a.detail, langkah=38), 480,
+            f"Posisi Terhadap Rata-rata Tahun {tahun}",
+            f"Selisih PDRB per kapita setiap wilayah terhadap rata-rata ({a.hasil.rata_rata:,.2f}).",
+        ))
+        out.append(_gambar(
+            grafik_batang(a.detail, "Porsi Kontribusi", "Porsi Kontribusi", BIRU_TUA,
+                          label_fn=lambda v: f"{v:.1%}", format_tooltip=".2%", langkah=38),
+            500, f"Kontribusi Terhadap Ketimpangan Tahun {tahun}",
+            "Porsi tiap wilayah terhadap total ketimpangan "
+            "(proporsi penduduk × selisih kuadrat terhadap rata-rata).",
+        ))
+        out.append(_gambar(
+            grafik_indikator(a.hasil.indeks), 650,
+            f"Posisi Indeks Williamson Tahun {tahun}",
+            f"{a.kategori}. Kategori: rendah (< 0,3), sedang (0,3 – 0,5), tinggi (> 0,5).",
         ))
 
     tren = tren_williamson(df)

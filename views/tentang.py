@@ -55,7 +55,7 @@ with st.container(border=True):
         (":material/calculate:", "Analisis Disparitas",
          "Hitung Indeks Williamson per tahun beserta rincian perhitungannya."),
         (":material/bar_chart:", "Visualisasi",
-         "Grafik PDRB per kapita, jumlah penduduk, dan perkembangan indeks."),
+         "Grafik PDRB, penduduk, posisi dan kontribusi wilayah, serta tren indeks."),
         (":material/dashboard:", "Dashboard",
          "Ringkasan data dan status analisis tahun terbaru."),
     ]
