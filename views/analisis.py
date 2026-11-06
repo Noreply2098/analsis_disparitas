@@ -4,9 +4,10 @@ import streamlit as st
 from charts import (
     BIRU_TUA, grafik_batang, grafik_indikator, grafik_selisih,
 )
+from laporan import blok_cetak
 from utils import (
     COL_PENDUDUK, COL_PDRB, COL_WILAYAH,
-    daftar_tahun, hitung_williamson, interpretasi, load_dataset, page_header,
+    daftar_tahun, load_dataset, narasi_ringkasan, page_header, susun_analisis,
 )
 
 page_header(
@@ -18,7 +19,8 @@ page_header(
 df, pesan = load_dataset()
 tahun_list = daftar_tahun(df) if df is not None else []
 
-with st.container(border=True):
+pengaturan = st.container(border=True)
+with pengaturan:
     st.subheader("Pengaturan Analisis")
     st.write("Pilih tahun pengamatan untuk melakukan perhitungan ketimpangan pendapatan.")
 
@@ -33,44 +35,21 @@ with st.container(border=True):
         "Tahun Pengamatan", tahun_list, index=len(tahun_list) - 1
     )
 
-hasil, pesan = hitung_williamson(df, tahun)
+a, pesan = susun_analisis(df, tahun)
 
-if hasil is None:
+if a is None:
     with st.container(border=True):
         st.subheader("Informasi Analisis")
         st.warning(pesan)
     st.stop()
 
-# ==============================
-# TURUNAN DATA
-# ==============================
-detail = hasil.detail.drop(columns=["Tahun"]).reset_index(drop=True)
+# ---- Cetak (satu bagian atau gabungan analisis + grafik) ----
+with pengaturan:
+    st.markdown("**Cetak Laporan**")
+    blok_cetak(tahun, "analisis")
 
-total_kontribusi = detail["Kontribusi"].sum()
-detail["Porsi Kontribusi"] = (
-    detail["Kontribusi"] / total_kontribusi if total_kontribusi > 0 else 0.0
-)
-detail["Posisi"] = np.select(
-    [detail["Selisih"] > 0, detail["Selisih"] < 0],
-    ["Di atas rata-rata", "Di bawah rata-rata"],
-    default="Sama dengan rata-rata",
-)
-
-kategori = interpretasi(hasil.indeks)
-jumlah_wilayah = len(detail)
-
-tertinggi = detail.loc[detail[COL_PDRB].idxmax()]
-terendah = detail.loc[detail[COL_PDRB].idxmin()]
-rasio = tertinggi[COL_PDRB] / terendah[COL_PDRB] if terendah[COL_PDRB] > 0 else None
-pendorong = detail.loc[detail["Porsi Kontribusi"].idxmax()]
-
-# Indeks tahun sebelumnya (tahun terdekat yang datanya memenuhi syarat)
-sebelumnya = None
-for t in reversed([t for t in tahun_list if t < tahun]):
-    h, _ = hitung_williamson(df, t)
-    if h is not None:
-        sebelumnya = (t, h.indeks)
-        break
+hasil, detail = a.hasil, a.detail
+tertinggi, terendah = a.tertinggi, a.terendah
 
 # ==============================
 # HASIL UTAMA
@@ -78,22 +57,22 @@ for t in reversed([t for t in tahun_list if t < tahun]):
 with st.container(border=True):
     st.subheader("Hasil Analisis Indeks Williamson")
 
-    if sebelumnya:
-        selisih_iw = hasil.indeks - sebelumnya[1]
+    if a.sebelumnya:
+        selisih_iw = hasil.indeks - a.sebelumnya[1]
         st.metric(
             "Nilai Indeks Williamson",
             f"{hasil.indeks:.4f}",
-            delta=f"{selisih_iw:+.4f} dibanding {sebelumnya[0]}",
+            delta=f"{selisih_iw:+.4f} dibanding {a.sebelumnya[0]}",
             delta_color="inverse",
             help="Panah merah = ketimpangan naik, hijau = ketimpangan turun.",
         )
     else:
         st.metric("Nilai Indeks Williamson", f"{hasil.indeks:.4f}")
 
-    pesan_kategori = f"**{kategori}** pada tahun {tahun}."
-    if kategori == "Ketimpangan rendah":
+    pesan_kategori = f"**{a.kategori}** pada tahun {tahun}."
+    if a.kategori == "Ketimpangan rendah":
         st.success(pesan_kategori)
-    elif kategori == "Ketimpangan sedang":
+    elif a.kategori == "Ketimpangan sedang":
         st.warning(pesan_kategori)
     else:
         st.error(pesan_kategori)
@@ -104,22 +83,7 @@ with st.container(border=True):
         "tinggi (> 0,5). Semakin besar nilai indeks, semakin timpang PDRB per "
         "kapita antarwilayah."
     )
-
-    ringkasan = (
-        f"Pada tahun {tahun}, PDRB per kapita tertinggi dimiliki **{tertinggi[COL_WILAYAH]}** "
-        f"({tertinggi[COL_PDRB]:,.0f}) dan terendah **{terendah[COL_WILAYAH]}** "
-        f"({terendah[COL_PDRB]:,.0f})"
-    )
-    if rasio:
-        ringkasan += f", atau selisih {rasio:.2f} kali lipat"
-    ringkasan += "."
-    if jumlah_wilayah > 1 and total_kontribusi > 0:
-        ringkasan += (
-            f" Wilayah yang paling besar menyumbang ketimpangan adalah "
-            f"**{pendorong[COL_WILAYAH]}** ({pendorong['Porsi Kontribusi']:.1%} "
-            f"dari total kontribusi)."
-        )
-    st.write(ringkasan)
+    st.write(narasi_ringkasan(a))
 
 # ==============================
 # RINGKASAN PERHITUNGAN
@@ -129,7 +93,7 @@ with st.container(border=True):
 
     baris1 = st.columns(3)
     baris1[0].metric("Tahun Pengamatan", tahun)
-    baris1[1].metric("Jumlah Wilayah", jumlah_wilayah)
+    baris1[1].metric("Jumlah Wilayah", a.jumlah_wilayah)
     baris1[2].metric("Total Penduduk", f"{hasil.total_penduduk:,.0f}")
 
     baris2 = st.columns(3)
@@ -147,7 +111,7 @@ with st.container(border=True):
         "Selisih Tertinggi–Terendah",
         f"{tertinggi[COL_PDRB] - terendah[COL_PDRB]:,.0f}",
     )
-    baris3[1].metric("Rasio Tertinggi/Terendah", f"{rasio:.2f}×" if rasio else "—")
+    baris3[1].metric("Rasio Tertinggi/Terendah", f"{a.rasio:.2f}×" if a.rasio else "—")
 
 # ==============================
 # ANALISIS LANJUTAN (TAB)
@@ -190,7 +154,7 @@ with st.container(border=True):
             COL_WILAYAH, COL_PDRB, COL_PENDUDUK, "Proporsi Penduduk",
             "Selisih", "Selisih Kuadrat", "Kontribusi", "Porsi Kontribusi", "Posisi",
         ]].copy()
-        tampil.index = range(1, jumlah_wilayah + 1)
+        tampil.index = range(1, a.jumlah_wilayah + 1)
         tampil.index.name = "No."
 
         st.dataframe(
@@ -210,7 +174,7 @@ with st.container(border=True):
         st.caption(
             f"Total: penduduk {tampil[COL_PENDUDUK].sum():,.0f} · "
             f"proporsi penduduk {tampil['Proporsi Penduduk'].sum():.2%} · "
-            f"kontribusi {total_kontribusi:,.2f} · "
+            f"kontribusi {a.total_kontribusi:,.2f} · "
             f"porsi kontribusi {tampil['Porsi Kontribusi'].sum():.2%}"
         )
 
@@ -224,16 +188,16 @@ with st.container(border=True):
     # ---- Langkah perhitungan ----
     with tab_langkah:
         st.caption(f"Langkah perhitungan Indeks Williamson tahun {tahun} dengan angka sebenarnya.")
-        akar = total_kontribusi ** 0.5
+        akar = a.total_kontribusi ** 0.5
         st.markdown(
             f"**1. Total penduduk (N)**  \n"
             f"N = Σ fᵢ = **{hasil.total_penduduk:,.0f}**\n\n"
             f"**2. Rata-rata PDRB per kapita dibobot penduduk (Ȳ)**  \n"
             f"Ȳ = Σ (Yᵢ × fᵢ) / N = **{hasil.rata_rata:,.2f}**\n\n"
             f"**3. Jumlah kontribusi seluruh wilayah**  \n"
-            f"Σ (Yᵢ − Ȳ)² × (fᵢ / N) = **{total_kontribusi:,.2f}**\n\n"
+            f"Σ (Yᵢ − Ȳ)² × (fᵢ / N) = **{a.total_kontribusi:,.2f}**\n\n"
             f"**4. Akar dari jumlah kontribusi**  \n"
-            f"√ {total_kontribusi:,.2f} = **{akar:,.2f}**\n\n"
+            f"√ {a.total_kontribusi:,.2f} = **{akar:,.2f}**\n\n"
             f"**5. Indeks Williamson**  \n"
             f"IW = {akar:,.2f} / {hasil.rata_rata:,.2f} = **{hasil.indeks:.4f}**"
         )

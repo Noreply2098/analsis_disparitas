@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import streamlit as st
 
@@ -196,3 +197,85 @@ def tren_williamson(df: pd.DataFrame) -> pd.DataFrame:
         if hasil is not None:
             baris.append({"Tahun": tahun, "Indeks Williamson": hasil.indeks})
     return pd.DataFrame(baris, columns=["Tahun", "Indeks Williamson"])
+
+
+# ==============================
+# RINGKASAN ANALISIS LENGKAP (dipakai halaman Analisis & dokumen cetak)
+# ==============================
+
+@dataclass
+class HasilAnalisis:
+    tahun: int
+    hasil: HasilWilliamson
+    detail: pd.DataFrame
+    kategori: str
+    total_kontribusi: float
+    tertinggi: pd.Series
+    terendah: pd.Series
+    rasio: float | None
+    pendorong: pd.Series
+    sebelumnya: tuple[int, float] | None
+
+    @property
+    def jumlah_wilayah(self) -> int:
+        return len(self.detail)
+
+
+def susun_analisis(
+    df: pd.DataFrame, tahun: int
+) -> tuple[HasilAnalisis | None, str | None]:
+    """Hitung Indeks Williamson beserta turunan yang dipakai untuk tampilan dan cetak."""
+    hasil, pesan = hitung_williamson(df, tahun)
+    if hasil is None:
+        return None, pesan
+
+    detail = hasil.detail.drop(columns=["Tahun"]).reset_index(drop=True)
+
+    total_kontribusi = float(detail["Kontribusi"].sum())
+    detail["Porsi Kontribusi"] = (
+        detail["Kontribusi"] / total_kontribusi if total_kontribusi > 0 else 0.0
+    )
+    detail["Posisi"] = np.select(
+        [detail["Selisih"] > 0, detail["Selisih"] < 0],
+        ["Di atas rata-rata", "Di bawah rata-rata"],
+        default="Sama dengan rata-rata",
+    )
+
+    tertinggi = detail.loc[detail[COL_PDRB].idxmax()]
+    terendah = detail.loc[detail[COL_PDRB].idxmin()]
+    rasio = tertinggi[COL_PDRB] / terendah[COL_PDRB] if terendah[COL_PDRB] > 0 else None
+    pendorong = detail.loc[detail["Porsi Kontribusi"].idxmax()]
+
+    sebelumnya = None
+    for t in reversed([t for t in daftar_tahun(df) if t < tahun]):
+        h, _ = hitung_williamson(df, t)
+        if h is not None:
+            sebelumnya = (t, h.indeks)
+            break
+
+    return HasilAnalisis(
+        tahun=tahun, hasil=hasil, detail=detail,
+        kategori=interpretasi(hasil.indeks),
+        total_kontribusi=total_kontribusi,
+        tertinggi=tertinggi, terendah=terendah, rasio=rasio,
+        pendorong=pendorong, sebelumnya=sebelumnya,
+    ), None
+
+
+def narasi_ringkasan(a: HasilAnalisis) -> str:
+    """Kalimat ringkasan otomatis (teks tebal ditandai dengan **...**)."""
+    teks = (
+        f"Pada tahun {a.tahun}, PDRB per kapita tertinggi dimiliki **{a.tertinggi[COL_WILAYAH]}** "
+        f"({a.tertinggi[COL_PDRB]:,.0f}) dan terendah **{a.terendah[COL_WILAYAH]}** "
+        f"({a.terendah[COL_PDRB]:,.0f})"
+    )
+    if a.rasio:
+        teks += f", atau selisih {a.rasio:.2f} kali lipat"
+    teks += "."
+    if a.jumlah_wilayah > 1 and a.total_kontribusi > 0:
+        teks += (
+            f" Wilayah yang paling besar menyumbang ketimpangan adalah "
+            f"**{a.pendorong[COL_WILAYAH]}** ({a.pendorong['Porsi Kontribusi']:.1%} "
+            f"dari total kontribusi)."
+        )
+    return teks

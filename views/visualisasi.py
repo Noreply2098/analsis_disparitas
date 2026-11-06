@@ -1,6 +1,7 @@
 import streamlit as st
 
 from charts import BIRU, BIRU_TUA, grafik_batang, grafik_tren
+from laporan import blok_cetak
 from utils import (
     COL_PENDUDUK, COL_PDRB, COL_WILAYAH,
     daftar_tahun, hitung_williamson, load_dataset, page_header,
@@ -38,6 +39,10 @@ df_penduduk = df_penduduk[df_penduduk[COL_PENDUDUK] > 0]
 if df_pdrb.empty and df_penduduk.empty:
     st.warning("Tidak ada data valid untuk ditampilkan.")
     st.stop()
+
+with st.container(border=True):
+    st.markdown("**Cetak Laporan**")
+    blok_cetak(tahun, "grafik")
 
 hasil, _ = hitung_williamson(df, tahun)
 

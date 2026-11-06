@@ -72,7 +72,7 @@ def _sumbu_nama():
 # BATANG HORIZONTAL TERURUT
 # ==============================
 def grafik_batang(data, kolom, judul_nilai, warna_akhir, rata_rata=None,
-                  label_fn=None, format_tooltip=",.0f"):
+                  label_fn=None, format_tooltip=",.0f", langkah=48):
     """Batang horizontal terurut, dengan label nilai langsung di ujung batang.
 
     label_fn: fungsi nilai -> teks label (default: singkatan rb/jt/M/T).
@@ -125,13 +125,13 @@ def grafik_batang(data, kolom, judul_nilai, warna_akhir, rata_rata=None,
         lapisan.append(garis)
     lapisan.append(label)  # label di lapisan teratas agar tidak tertimpa garis
 
-    return gaya(alt.layer(*lapisan).properties(height=alt.Step(48)))
+    return gaya(alt.layer(*lapisan).properties(height=alt.Step(langkah)))
 
 
 # ==============================
 # BATANG BERDIVERGENSI (selisih terhadap rata-rata)
 # ==============================
-def grafik_selisih(data, kolom_selisih="Selisih", kolom_posisi="Posisi"):
+def grafik_selisih(data, kolom_selisih="Selisih", kolom_posisi="Posisi", langkah=48):
     """Selisih PDRB tiap wilayah terhadap rata-rata: biru di atas, oranye di bawah."""
     d = data[[COL_WILAYAH, kolom_selisih, kolom_posisi]].copy()
     d["Nama"] = d[COL_WILAYAH].apply(_bungkus_nama)
@@ -188,7 +188,7 @@ def grafik_selisih(data, kolom_selisih="Selisih", kolom_posisi="Posisi"):
     ).encode(text="Label:N").transform_filter(alt.datum[kolom_selisih] < 0)
 
     return gaya(
-        alt.layer(batang, nol, teks_pos, teks_neg).properties(height=alt.Step(48))
+        alt.layer(batang, nol, teks_pos, teks_neg).properties(height=alt.Step(langkah))
     )
 
 
