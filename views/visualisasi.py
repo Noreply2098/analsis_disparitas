@@ -1,13 +1,27 @@
 import streamlit as st
 
-from charts import (
-    BIRU, BIRU_TUA, grafik_batang, grafik_indikator, grafik_selisih, grafik_tren,
-)
-from laporan import blok_cetak
 from utils import (
-    COL_PENDUDUK, COL_PDRB,
-    daftar_tahun, load_dataset, page_header, susun_analisis,
-    to_numeric_frame, tren_williamson,
+    COL_PDRB,
+    COL_PENDUDUK,
+    beri_label_unik,
+    daftar_tahun,
+    duplikat_tahun,
+    load_dataset,
+    page_header,
+    susun_analisis,
+    to_numeric_frame,
+    tren_williamson,
+)
+from charts import (
+    BIRU,
+    BIRU_TUA,
+    grafik_batang,
+    grafik_indikator,
+    grafik_selisih,
+    grafik_tren,
+)
+from laporan import (
+    blok_cetak,
 )
 
 page_header(
@@ -30,7 +44,7 @@ if not tahun_list:
 tahun = st.selectbox("Tahun Pengamatan", tahun_list, index=len(tahun_list) - 1)
 
 data = to_numeric_frame(df)
-data = data[data["Tahun"] == tahun]
+data = beri_label_unik(data[data["Tahun"] == tahun])
 
 df_pdrb = data.dropna(subset=[COL_PDRB])
 df_penduduk = data.dropna(subset=[COL_PENDUDUK])
@@ -39,6 +53,13 @@ df_penduduk = df_penduduk[df_penduduk[COL_PENDUDUK] > 0]
 if df_pdrb.empty and df_penduduk.empty:
     st.warning("Tidak ada data valid untuk ditampilkan.")
     st.stop()
+
+dup = duplikat_tahun(df, tahun)
+if not dup.empty:
+    st.warning(
+        f"Data tahun {tahun} memiliki **{len(dup)} baris duplikat** (wilayah sama), "
+        "sehingga grafik dapat tidak akurat. Rapikan di halaman Data Pendapatan."
+    )
 
 with st.container(border=True):
     st.markdown("**Cetak Laporan**")

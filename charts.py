@@ -1,11 +1,12 @@
 """Pembuat grafik Altair yang dipakai bersama oleh halaman Visualisasi dan Analisis."""
 
-import textwrap
-
 import altair as alt
 import pandas as pd
+import textwrap
 
-from utils import COL_WILAYAH
+from utils import (
+    COL_WILAYAH,
+)
 
 # ==============================
 # GAYA GRAFIK

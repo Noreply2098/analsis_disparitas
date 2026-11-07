@@ -1,8 +1,12 @@
 import streamlit as st
 
 from utils import (
-    COL_PENDUDUK, COL_PDRB, COL_TAHUN, COL_WILAYAH,
-    daftar_tahun, hitung_williamson, interpretasi, load_dataset, page_header,
+    COL_WILAYAH,
+    daftar_tahun,
+    hitung_williamson,
+    interpretasi,
+    load_dataset,
+    page_header,
 )
 
 page_header(

@@ -1,6 +1,9 @@
 import streamlit as st
 
-from utils import REQUIRED_COLUMNS, page_header
+from utils import (
+    REQUIRED_COLUMNS,
+    page_header,
+)
 
 page_header(
     "Tentang Regional Income Analysis",
@@ -47,11 +50,11 @@ with st.container(border=True):
     st.subheader("Fitur Utama")
     fitur = [
         (":material/upload_file:", "Import Data",
-         "Unggah dataset dalam format CSV atau Excel (.xlsx)."),
+         "Unggah CSV/Excel dengan validasi per baris dan deteksi duplikat."),
         (":material/edit_note:", "Input Manual",
          "Tambahkan data wilayah langsung melalui tabel isian."),
         (":material/table_chart:", "Kelola Data",
-         "Ubah, tambah, dan hapus data pendapatan langsung di tabel."),
+         "Ubah data di tabel, unduh, cadangkan, dan pulihkan dataset."),
         (":material/calculate:", "Analisis Disparitas",
          "Hitung Indeks Williamson per tahun beserta rincian perhitungannya."),
         (":material/bar_chart:", "Visualisasi",

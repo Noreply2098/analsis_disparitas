@@ -1,9 +1,18 @@
 import streamlit as st
 
-from laporan import blok_cetak
 from utils import (
-    COL_PENDUDUK, COL_PDRB, COL_WILAYAH,
-    daftar_tahun, load_dataset, narasi_ringkasan, page_header, susun_analisis,
+    COL_PDRB,
+    COL_PENDUDUK,
+    COL_WILAYAH,
+    daftar_tahun,
+    duplikat_tahun,
+    load_dataset,
+    narasi_ringkasan,
+    page_header,
+    susun_analisis,
+)
+from laporan import (
+    blok_cetak,
 )
 
 page_header(
@@ -29,6 +38,14 @@ with pengaturan:
 
     tahun = st.selectbox(
         "Tahun Pengamatan", tahun_list, index=len(tahun_list) - 1
+    )
+
+dup = duplikat_tahun(df, tahun)
+if not dup.empty:
+    st.warning(
+        f"Data tahun {tahun} memiliki **{len(dup)} baris duplikat** (wilayah sama), "
+        "sehingga hasil perhitungan dapat tidak akurat. "
+        "Rapikan di halaman Data Pendapatan."
     )
 
 a, pesan = susun_analisis(df, tahun)

@@ -2,23 +2,34 @@
 
 Dokumen cetak dibuat sebagai HTML mandiri (grafik berupa SVG) lalu dibuka di
 jendela baru dan dicetak oleh browser. Dengan begitu hasil cetak tidak
-bergantung pada tampilan layar Streamlit (sidebar, area gulir, dsb.).
-"""
+bergantung pada tampilan layar Streamlit (sidebar, area gulir, dsb.)."""
 
 import html
 import json
 import re
-
 import streamlit as st
 import vl_convert as vlc
 
-from charts import (
-    BIRU, BIRU_TUA, grafik_batang, grafik_indikator, grafik_selisih, grafik_tren,
-)
 from utils import (
-    COL_PDRB, COL_PENDUDUK, COL_WILAYAH, DATASET_PATH,
-    daftar_tahun, load_dataset, narasi_ringkasan, susun_analisis,
-    to_numeric_frame, tren_williamson,
+    COL_PDRB,
+    COL_PENDUDUK,
+    COL_TAHUN,
+    COL_WILAYAH,
+    DATASET_PATH,
+    beri_label_unik,
+    load_dataset,
+    narasi_ringkasan,
+    susun_analisis,
+    to_numeric_frame,
+    tren_williamson,
+)
+from charts import (
+    BIRU,
+    BIRU_TUA,
+    grafik_batang,
+    grafik_indikator,
+    grafik_selisih,
+    grafik_tren,
 )
 
 NAMA_APLIKASI = "Regional Income Analysis (RIA)"
@@ -253,7 +264,7 @@ def bagian_analisis(df, tahun: int) -> str:
 
 def bagian_grafik(df, tahun: int) -> str:
     data = to_numeric_frame(df)
-    data = data[data["Tahun"] == tahun]
+    data = beri_label_unik(data[data["Tahun"] == tahun])
 
     df_pdrb = data.dropna(subset=[COL_PDRB])
     df_penduduk = data.dropna(subset=[COL_PENDUDUK])
