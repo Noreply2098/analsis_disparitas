@@ -16,9 +16,11 @@ from utils import (
     duplikat,
     flash,
     hapus_duplikat,
+    identitas_tidak_lengkap,
     info_dataset,
     ke_csv_bytes,
     ke_excel_bytes,
+    kemungkinan_duplikat,
     kolom_dataset,
     load_dataset,
     page_header,
@@ -80,16 +82,41 @@ with tab_tabel:
                     "Saya setuju baris duplikat dihapus (cadangan dibuat otomatis)", key="setuju_dup"
                 )
                 aksi = st.columns(2)
-                if aksi[0].button("Hapus duplikat (simpan baris pertama)", disabled=not setuju):
-                    save_dataset(hapus_duplikat(periksa.valid, "pertama"), alasan="hapus-duplikat")
-                    st.session_state.pop("editor_data", None)
-                    flash("Duplikat dihapus, baris pertama dipertahankan.")
-                    st.rerun()
-                if aksi[1].button("Hapus duplikat (simpan baris terakhir)", disabled=not setuju):
-                    save_dataset(hapus_duplikat(periksa.valid, "terakhir"), alasan="hapus-duplikat")
-                    st.session_state.pop("editor_data", None)
-                    flash("Duplikat dihapus, baris terakhir dipertahankan.")
-                    st.rerun()
+                for kol_aksi, simpan, label_aksi in (
+                    (aksi[0], "pertama", "Hapus duplikat (simpan baris pertama)"),
+                    (aksi[1], "terakhir", "Hapus duplikat (simpan baris terakhir)"),
+                ):
+                    if kol_aksi.button(label_aksi, disabled=not setuju):
+                        try:
+                            save_dataset(hapus_duplikat(periksa.valid, simpan), alasan="hapus-duplikat")
+                        except ValueError as e:
+                            st.error(str(e))
+                        else:
+                            st.session_state.pop("editor_data", None)
+                            flash(f"Duplikat dihapus, baris {simpan} dipertahankan.")
+                            st.rerun()
+
+        # ---- Identitas wilayah tidak lengkap (hanya peringatan; tidak ada yang diubah otomatis) ----
+        mungkin = kemungkinan_duplikat(periksa.valid)
+        if not mungkin.empty:
+            st.warning(
+                f"**{len(mungkin)} baris kemungkinan duplikat:** nama wilayah dan tahun sama, tetapi "
+                "identitas (kode/provinsi) kosong pada sebagian baris. Periksa dan lengkapi pada "
+                "tabel di bawah; tidak ada data yang digabung atau dihapus otomatis."
+            )
+            with st.expander("Lihat kemungkinan duplikat"):
+                st.dataframe(
+                    mungkin.fillna(""), hide_index=True,
+                    column_config={"Alasan": st.column_config.Column(width="large")},
+                )
+        lengkap = identitas_tidak_lengkap(periksa.valid)
+        if not lengkap.empty:
+            st.info(
+                f"{len(lengkap)} baris memiliki identitas wilayah tidak lengkap "
+                "(Kode Wilayah/Provinsi kosong)."
+            )
+            with st.expander("Lihat baris dengan identitas tidak lengkap"):
+                st.dataframe(lengkap.fillna(""), hide_index=True)
 
         # ---- Tabel (edit / tambah / hapus langsung di tabel) ----
         with st.container(border=True):
@@ -102,6 +129,9 @@ with tab_tabel:
             )
 
             tabel = df[[c for c in df.columns if c in kolom_dataset(df) or c in (COL_KODE, COL_PROVINSI)]].copy()
+            for kolom_id in (COL_KODE, COL_PROVINSI):
+                if kolom_id in tabel.columns:
+                    tabel[kolom_id] = tabel[kolom_id].fillna("").astype(str)  # editor teks
             tabel.index = np.arange(len(tabel)) + 1
             tabel.index.name = "No."
 

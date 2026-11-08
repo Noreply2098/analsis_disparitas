@@ -19,10 +19,11 @@ from utils import (
     duplikat,
     flash,
     hapus_duplikat,
+    identitas_tidak_lengkap,
     ke_csv_bytes,
     ke_excel_bytes,
+    kemungkinan_duplikat,
     kolom_dataset,
-    terapkan_pilihan_duplikat,
     kunci_baris,
     load_dataset,
     page_header,
@@ -30,6 +31,7 @@ from utils import (
     save_dataset,
     show_flash,
     template_kosong,
+    terapkan_pilihan_duplikat,
     validasi_baris,
 )
 
@@ -127,6 +129,42 @@ def tampilkan_peringatan(peringatan: pd.DataFrame, kunci: str):
         )
         return not ok
     return False
+
+
+def tampilkan_identitas(df: pd.DataFrame, kunci: str) -> bool:
+    """Peringatan identitas wilayah tidak lengkap.
+
+    Mengembalikan True bila ada kemungkinan duplikat yang belum dikonfirmasi pengguna.
+    Tidak ada data yang digabung atau dihapus otomatis.
+    """
+    kemungkinan = kemungkinan_duplikat(df)
+    tidak_lengkap = identitas_tidak_lengkap(df)
+    perlu_konfirmasi = False
+
+    if not kemungkinan.empty:
+        st.warning(
+            f"**{len(kemungkinan)} baris kemungkinan duplikat.** Nama wilayah dan tahun sama, "
+            "tetapi identitas (kode/provinsi) kosong pada sebagian baris sehingga belum pasti "
+            "wilayah yang sama. Tidak ada data yang digabung atau dihapus otomatis."
+        )
+        with st.expander("Lihat kemungkinan duplikat", expanded=True):
+            st.dataframe(
+                kemungkinan.fillna(""), hide_index=True,
+                column_config={"Alasan": st.column_config.Column(width="large")},
+            )
+        sudah = st.checkbox(
+            "Saya sudah memeriksa kemungkinan duplikat dan tetap ingin menyimpan", key=kunci
+        )
+        perlu_konfirmasi = not sudah
+
+    if not tidak_lengkap.empty:
+        st.info(
+            f"{len(tidak_lengkap)} baris memiliki identitas wilayah tidak lengkap "
+            "(Kode Wilayah/Provinsi kosong). Lengkapi agar wilayah bernama sama tidak tertukar."
+        )
+        with st.expander("Lihat baris dengan identitas tidak lengkap"):
+            st.dataframe(tidak_lengkap.fillna(""), hide_index=True)
+    return perlu_konfirmasi
 
 
 tab_upload, tab_manual = st.tabs(["Unggah Dataset", "Input Data Manual"])
@@ -261,6 +299,10 @@ with tab_upload:
 
         # ---- Duplikat ----
         tanpa_duplikat, galat_duplikat = tangani_duplikat(gabungan, f"file_{sig}")
+        butuh_cek_identitas = (
+            tampilkan_identitas(tanpa_duplikat, f"identitas_{sig}")
+            if tanpa_duplikat is not None else False
+        )
 
         # ---- Metadata sumber (opsional) ----
         with st.expander("Catatan sumber data (opsional)"):
@@ -283,6 +325,8 @@ with tab_upload:
             syarat.append("konfirmasi penggantian dataset")
         if galat_duplikat:
             syarat.append(galat_duplikat)
+        if butuh_cek_identitas:
+            syarat.append("konfirmasi pemeriksaan kemungkinan duplikat")
 
         if tanpa_duplikat is not None:
             hasil_akhir = tanpa_duplikat[kolom_dataset(tanpa_duplikat)]
@@ -381,6 +425,8 @@ with tab_manual:
             tanpa_dup_manual, galat_dup = tangani_duplikat(gabungan_manual, f"manual_{versi}")
             if galat_dup:
                 syarat_manual.append(galat_dup)
+            elif tampilkan_identitas(tanpa_dup_manual, f"identitas_manual_{versi}"):
+                syarat_manual.append("konfirmasi pemeriksaan kemungkinan duplikat")
 
     if st.button("Simpan Data", type="primary", disabled=bool(syarat_manual)):
         try:

@@ -6,6 +6,7 @@ from utils import (
     beri_label_unik,
     daftar_tahun,
     duplikat_tahun,
+    kemungkinan_duplikat_tahun,
     load_dataset,
     page_header,
     susun_analisis,
@@ -59,6 +60,14 @@ if not dup.empty:
     st.warning(
         f"Data tahun {tahun} memiliki **{len(dup)} baris duplikat** (wilayah sama), "
         "sehingga grafik dapat tidak akurat. Rapikan di halaman Data Pendapatan."
+    )
+
+mungkin = kemungkinan_duplikat_tahun(df, tahun)
+if not mungkin.empty:
+    st.warning(
+        f"Data tahun {tahun} memiliki **{len(mungkin)} baris kemungkinan duplikat** "
+        "(identitas wilayah tidak lengkap), sehingga grafik dapat tidak akurat. "
+        "Periksa di halaman Data Pendapatan."
     )
 
 with st.container(border=True):

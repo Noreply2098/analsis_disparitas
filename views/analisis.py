@@ -6,6 +6,7 @@ from utils import (
     COL_WILAYAH,
     daftar_tahun,
     duplikat_tahun,
+    kemungkinan_duplikat_tahun,
     load_dataset,
     narasi_ringkasan,
     page_header,
@@ -46,6 +47,14 @@ if not dup.empty:
         f"Data tahun {tahun} memiliki **{len(dup)} baris duplikat** (wilayah sama), "
         "sehingga hasil perhitungan dapat tidak akurat. "
         "Rapikan di halaman Data Pendapatan."
+    )
+
+mungkin = kemungkinan_duplikat_tahun(df, tahun)
+if not mungkin.empty:
+    st.warning(
+        f"Data tahun {tahun} memiliki **{len(mungkin)} baris kemungkinan duplikat** "
+        "(identitas wilayah tidak lengkap), sehingga hasil perhitungan dapat tidak akurat. "
+        "Periksa di halaman Data Pendapatan."
     )
 
 a, pesan = susun_analisis(df, tahun)

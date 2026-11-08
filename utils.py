@@ -288,11 +288,20 @@ def periksa_baris(df: pd.DataFrame, offset: int = 1) -> HasilPeriksa:
 # ==============================
 
 def kunci_baris(df: pd.DataFrame) -> pd.Series:
-    """Kunci pembanding baris: nama (huruf kecil, spasi dirapikan) + tahun + identitas opsional."""
-    kunci = normalisasi_nama(df[COL_WILAYAH]).str.lower()
-    kunci = kunci + "|" + pd.to_numeric(df[COL_TAHUN], errors="coerce").astype("Int64").astype(str)
-    for c in kolom_identitas(df):
-        kunci = kunci + "|" + normalisasi_nama(df[c]).str.lower()
+    """Kunci pembanding baris.
+
+    - Bila Kode Wilayah terisi, kode resmi itulah identitas utama (kode + tahun); nama
+      yang ditulis berbeda tidak menjadi masalah.
+    - Selain itu: nama (huruf kecil, spasi dirapikan) + tahun + provinsi (bila ada).
+    """
+    tahun = pd.to_numeric(df[COL_TAHUN], errors="coerce").astype("Int64").astype(str)
+    kunci = "nama:" + normalisasi_nama(df[COL_WILAYAH]).str.lower() + "|" + tahun
+    ident = kolom_identitas(df)
+    if COL_PROVINSI in ident:
+        kunci = kunci + "|" + normalisasi_nama(df[COL_PROVINSI]).str.lower()
+    if COL_KODE in ident:
+        kode = normalisasi_nama(df[COL_KODE]).str.lower()
+        kunci = kunci.where(kode == "", "kode:" + kode + "|" + tahun)
     return kunci
 
 
@@ -331,6 +340,71 @@ def hapus_duplikat(df: pd.DataFrame, simpan: str = "pertama") -> pd.DataFrame:
     return df[~kunci_baris(df).duplicated(keep=keep)].reset_index(drop=True)
 
 
+def _kosong(df: pd.DataFrame, kolom: str) -> pd.Series:
+    return normalisasi_nama(df[kolom]).eq("")
+
+
+def identitas_tidak_lengkap(df: pd.DataFrame) -> pd.DataFrame:
+    """Baris yang Kode Wilayah / Provinsinya kosong padahal kolom itu dipakai pada dataset."""
+    ident = kolom_identitas(df)
+    kolom_tampil = ["Baris"] + (["Asal"] if "Asal" in df.columns else []) + REQUIRED_COLUMNS + ident + ["Catatan"]
+    if not ident or df.empty:
+        return pd.DataFrame(columns=kolom_tampil)
+
+    d = df.copy()
+    if "Baris" not in d.columns:
+        d["Baris"] = np.arange(len(d)) + 1
+    kurang = pd.Series([[] for _ in range(len(d))], index=d.index)
+    for c in ident:
+        for i in d.index[_kosong(d, c)]:
+            kurang[i] = kurang[i] + [c]
+    d = d[kurang.map(len) > 0].copy()
+    d["Catatan"] = kurang[d.index].map(lambda k: "Kosong: " + ", ".join(k))
+    return d[kolom_tampil].reset_index(drop=True)
+
+
+def kemungkinan_duplikat(df: pd.DataFrame) -> pd.DataFrame:
+    """Baris yang mungkin merujuk wilayah yang sama karena identitasnya tidak lengkap.
+
+    Contoh: "Kabupaten A / 2024 / Sumatera Utara" dan "Kabupaten A / 2024 / (kosong)".
+    Nama + tahun sama, kuncinya berbeda, dan sebagian identitas kosong pada salah satunya.
+    Wilayah yang identitasnya terisi lengkap dan berbeda (mis. provinsi berbeda) tidak ditandai.
+    Hasil hanya untuk diperiksa pengguna; tidak ada data yang digabung atau dihapus.
+    """
+    ident = kolom_identitas(df)
+    kolom_tampil = (
+        ["Baris"] + (["Asal"] if "Asal" in df.columns else [])
+        + REQUIRED_COLUMNS + ident + ["Jenis", "Alasan"]
+    )
+    if not ident or df.empty:
+        return pd.DataFrame(columns=kolom_tampil)
+
+    d = df.copy()
+    if "Baris" not in d.columns:
+        d["Baris"] = np.arange(len(d)) + 1
+    d["_k"] = kunci_baris(d)
+    d["_g"] = normalisasi_nama(d[COL_WILAYAH]).str.lower() + "|" + pd.to_numeric(
+        d[COL_TAHUN], errors="coerce"
+    ).astype("Int64").astype(str)
+
+    terpilih, alasan = [], {}
+    for _, g in d.groupby("_g"):
+        if len(g) < 2 or g["_k"].nunique() < 2:
+            continue
+        kurang = [c for c in ident if _kosong(g, c).any() and (~_kosong(g, c)).any()]
+        if kurang:
+            terpilih.extend(g.index)
+            for i in g.index:
+                alasan[i] = "Identitas tidak lengkap: " + ", ".join(kurang) + " kosong pada sebagian baris"
+
+    if not terpilih:
+        return pd.DataFrame(columns=kolom_tampil)
+    hasil = d.loc[terpilih].copy()
+    hasil["Jenis"] = "Kemungkinan duplikat"
+    hasil["Alasan"] = pd.Series(alasan)
+    return hasil.sort_values(["_g", "Baris"], kind="stable")[kolom_tampil].reset_index(drop=True)
+
+
 def terapkan_pilihan_duplikat(gabungan: pd.DataFrame, pilihan: pd.DataFrame):
     """Terapkan pilihan manual: tepat satu baris "Simpan" untuk setiap kelompok duplikat.
 
@@ -351,6 +425,12 @@ def duplikat_tahun(df: pd.DataFrame, tahun: int) -> pd.DataFrame:
     """Duplikat pada satu tahun pengamatan (untuk peringatan di halaman analisis)."""
     data = to_numeric_frame(df)
     return duplikat(data[data[COL_TAHUN] == tahun])
+
+
+def kemungkinan_duplikat_tahun(df: pd.DataFrame, tahun: int) -> pd.DataFrame:
+    """Kemungkinan duplikat pada satu tahun pengamatan."""
+    data = to_numeric_frame(df)
+    return kemungkinan_duplikat(data[data[COL_TAHUN] == tahun])
 
 
 def beri_label_unik(df: pd.DataFrame) -> pd.DataFrame:
@@ -555,7 +635,9 @@ def load_dataset() -> tuple[pd.DataFrame | None, str | None]:
         return None, "Dataset belum tersedia. Silakan masukkan data terlebih dahulu."
 
     try:
-        df = pd.read_csv(DATASET_PATH)
+        # Kode/provinsi adalah identitas (teks): "0101" tidak boleh menjadi 101 dan kolom
+        # yang sebagian kosong tidak boleh berubah menjadi desimal.
+        df = pd.read_csv(DATASET_PATH, dtype={c: str for c in OPTIONAL_COLUMNS})
     except Exception:
         return None, "Dataset tidak dapat dibaca. Silakan import ulang data."
 
@@ -565,28 +647,81 @@ def load_dataset() -> tuple[pd.DataFrame | None, str | None]:
     return df, None
 
 
+def _bandingkan_isi(maksud: pd.DataFrame, terbaca: pd.DataFrame) -> str | None:
+    """Bandingkan data yang dimaksudkan dengan hasil baca ulang berkas.
+
+    Memeriksa urutan/nama kolom, jumlah baris, nilai kosong, tipe angka (bulat vs desimal),
+    presisi angka, dan isi teks. Mengembalikan pesan perbedaan pertama, atau None bila sama.
+    """
+    if list(terbaca.columns) != list(maksud.columns):
+        return f"kolom berbeda (diharapkan {list(maksud.columns)}, terbaca {list(terbaca.columns)})"
+    if len(terbaca) != len(maksud):
+        return f"jumlah baris berbeda (diharapkan {len(maksud)}, terbaca {len(terbaca)})"
+
+    for kolom in maksud.columns:
+        a = maksud[kolom].reset_index(drop=True)
+        b = terbaca[kolom].reset_index(drop=True)
+
+        if pd.api.types.is_numeric_dtype(a):
+            if not pd.api.types.is_numeric_dtype(b):
+                return f"kolom '{kolom}' tidak lagi berupa angka"
+            if pd.api.types.is_integer_dtype(a) != pd.api.types.is_integer_dtype(b):
+                return f"tipe angka kolom '{kolom}' berubah (bulat/desimal)"
+            if a.isna().tolist() != b.isna().tolist():
+                return f"nilai kosong pada kolom '{kolom}' berubah"
+            ada = a.notna().to_numpy()
+            if not np.allclose(a[ada].astype(float), b[ada].astype(float), rtol=1e-12, atol=0):
+                return f"presisi angka kolom '{kolom}' berubah"
+        else:
+            # CSV tidak membedakan teks kosong dan nilai kosong, jadi keduanya disamakan.
+            if a.fillna("").astype(str).tolist() != b.fillna("").astype(str).tolist():
+                return f"isi teks kolom '{kolom}' berubah"
+    return None
+
+
 def save_dataset(df: pd.DataFrame, alasan: str = "simpan", metadata: dict | None = None) -> dict:
-    """Simpan dataset dengan aman lalu verifikasi.
+    """Simpan dataset dengan aman lalu verifikasi isinya.
 
     Langkah: cadangan dataset lama -> tulis berkas sementara -> ganti secara atomik ->
-    baca ulang dan cocokkan jumlah baris & kolom -> catat metadata.
-    Mengembalikan metadata yang tersimpan. Melempar ValueError bila verifikasi gagal.
+    baca ulang dan bandingkan ISI dengan data yang dimaksud -> catat metadata.
+    Bila penulisan atau verifikasi gagal, dataset sebelumnya dikembalikan dari cadangan
+    dan ValueError dilempar; penyimpanan tidak pernah dilaporkan berhasil.
     """
     DATA_DIR.mkdir(exist_ok=True)
-    buat_cadangan(alasan)
-
     kolom = kolom_dataset(df)
-    sementara = DATASET_PATH.with_suffix(".tmp")
-    df[kolom].to_csv(sementara, index=False, encoding="utf-8-sig")
-    os.replace(sementara, DATASET_PATH)
+    maksud = df[kolom].reset_index(drop=True)
+    ada_sebelumnya = DATASET_PATH.exists()
+    meta_sebelumnya = METADATA_PATH.read_bytes() if METADATA_PATH.exists() else None
+    cadangan = buat_cadangan(alasan)
 
-    # Verifikasi: baca ulang dan pastikan isinya sesuai.
+    sementara = DATASET_PATH.with_suffix(".tmp")
+
+    def kembalikan(pesan: str):
+        """Kembalikan dataset dan metadata sebelumnya, lalu laporkan kegagalan."""
+        sementara.unlink(missing_ok=True)
+        if ada_sebelumnya and cadangan:
+            shutil.copyfile(BACKUP_DIR / cadangan, DATASET_PATH)
+            if meta_sebelumnya is not None:
+                METADATA_PATH.write_bytes(meta_sebelumnya)
+            else:
+                METADATA_PATH.unlink(missing_ok=True)
+            raise ValueError(f"{pesan} Dataset sebelumnya dikembalikan dari cadangan.")
+        DATASET_PATH.unlink(missing_ok=True)
+        raise ValueError(f"{pesan} Dataset belum tersimpan.")
+
+    try:
+        maksud.to_csv(sementara, index=False, encoding="utf-8-sig")
+        os.replace(sementara, DATASET_PATH)
+    except OSError as e:
+        kembalikan(f"Gagal menulis dataset ({e}).")
+
+    # Verifikasi isi: baca ulang berkas hasil penyimpanan.
     ulang, galat = load_dataset()
-    if ulang is None or len(ulang) != len(df) or list(ulang.columns) != kolom:
-        raise ValueError(
-            "Verifikasi setelah menyimpan gagal: isi dataset tidak sesuai. "
-            "Pulihkan dari cadangan terbaru di tab Kelola Dataset."
-        )
+    if ulang is None:
+        kembalikan(f"Verifikasi gagal: berkas tidak dapat dibaca ({galat}).")
+    perbedaan = _bandingkan_isi(maksud, ulang)
+    if perbedaan:
+        kembalikan(f"Verifikasi gagal: {perbedaan}.")
 
     meta = baca_metadata()
     if metadata:
@@ -609,8 +744,11 @@ def delete_dataset() -> None:
 # CADANGAN
 # ==============================
 
-def buat_cadangan(alasan: str) -> str | None:
-    """Salin dataset aktif (dan metadatanya) ke folder cadangan. Mengembalikan nama berkas."""
+def buat_cadangan(alasan: str, lindungi: set[str] | None = None) -> str | None:
+    """Salin dataset aktif (dan metadatanya) ke folder cadangan. Mengembalikan nama berkas.
+
+    lindungi: nama cadangan yang tidak boleh ikut dipangkas.
+    """
     if not DATASET_PATH.exists():
         return None
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
@@ -619,13 +757,16 @@ def buat_cadangan(alasan: str) -> str | None:
     shutil.copy2(DATASET_PATH, tujuan)
     if METADATA_PATH.exists():
         shutil.copy2(METADATA_PATH, tujuan.with_suffix(".json"))
-    _pangkas_cadangan()
+    _pangkas_cadangan(lindungi or set())
     return tujuan.name
 
 
-def _pangkas_cadangan() -> None:
+def _pangkas_cadangan(lindungi: set[str] | None = None) -> None:
+    lindungi = lindungi or set()
     berkas = sorted(BACKUP_DIR.glob("dataset_*.csv"), reverse=True)
     for lama in berkas[MAKS_CADANGAN:]:
+        if lama.name in lindungi:
+            continue
         lama.unlink(missing_ok=True)
         lama.with_suffix(".json").unlink(missing_ok=True)
 
@@ -652,22 +793,77 @@ def daftar_cadangan() -> list[dict]:
     return hasil
 
 
-def pulihkan(nama_berkas: str) -> None:
-    """Pulihkan dataset dan metadata dari cadangan (kondisi saat ini dicadangkan lebih dulu)."""
+def periksa_cadangan(nama_berkas: str) -> pd.DataFrame:
+    """Pastikan cadangan dapat dibaca dan berstruktur benar. Melempar ValueError bila tidak."""
     sumber = BACKUP_DIR / os.path.basename(nama_berkas)
     if not sumber.exists():
         raise ValueError("Cadangan tidak ditemukan.")
-    buat_cadangan("sebelum-pulih")
+    try:
+        data = pd.read_csv(sumber, dtype={c: str for c in OPTIONAL_COLUMNS})
+    except Exception as e:
+        raise ValueError(f"Cadangan rusak dan tidak dapat dibaca ({type(e).__name__}).") from e
+    kurang = [k for k in REQUIRED_COLUMNS if k not in data.columns]
+    if kurang:
+        raise ValueError("Cadangan tidak sesuai: kolom wajib hilang (" + ", ".join(kurang) + ").")
+    return data
+
+
+def pulihkan(nama_berkas: str) -> None:
+    """Pulihkan dataset dan metadata dari cadangan, lalu verifikasi hasilnya.
+
+    Urutan: periksa cadangan -> cadangkan kondisi saat ini -> ganti dataset secara atomik ->
+    baca ulang dan cocokkan dengan cadangan -> pulihkan metadata yang sesuai.
+    Cadangan tidak pernah dihapus; bila gagal, kondisi sebelumnya dikembalikan.
+    """
+    sumber = BACKUP_DIR / os.path.basename(nama_berkas)
+    isi_cadangan = periksa_cadangan(nama_berkas)  # ditolak sebelum ada yang diubah
+
+    ada_sebelumnya = DATASET_PATH.exists()
+    meta_sebelumnya = METADATA_PATH.read_bytes() if METADATA_PATH.exists() else None
+    sebelum = buat_cadangan("sebelum-pulih", lindungi={sumber.name})
+
     DATA_DIR.mkdir(exist_ok=True)
     sementara = DATASET_PATH.with_suffix(".tmp")
-    shutil.copyfile(sumber, sementara)
-    os.replace(sementara, DATASET_PATH)
 
+    def batalkan(pesan: str):
+        sementara.unlink(missing_ok=True)
+        if ada_sebelumnya and sebelum:
+            shutil.copyfile(BACKUP_DIR / sebelum, DATASET_PATH)
+            if meta_sebelumnya is not None:
+                METADATA_PATH.write_bytes(meta_sebelumnya)
+            else:
+                METADATA_PATH.unlink(missing_ok=True)
+            raise ValueError(f"{pesan} Dataset sebelumnya dikembalikan; cadangan tetap tersimpan.")
+        DATASET_PATH.unlink(missing_ok=True)
+        raise ValueError(f"{pesan} Cadangan tetap tersimpan.")
+
+    try:
+        shutil.copyfile(sumber, sementara)
+        os.replace(sementara, DATASET_PATH)
+    except OSError as e:
+        batalkan(f"Gagal memulihkan dataset ({e}).")
+
+    # Verifikasi: dataset aktif harus identik dengan cadangan yang dipilih.
+    ulang, galat = load_dataset()
+    if ulang is None:
+        batalkan(f"Verifikasi gagal: dataset hasil pemulihan tidak dapat dibaca ({galat}).")
+    perbedaan = _bandingkan_isi(isi_cadangan, ulang)
+    if perbedaan or DATASET_PATH.read_bytes() != sumber.read_bytes():
+        batalkan(f"Verifikasi gagal: isi dataset tidak sama dengan cadangan ({perbedaan or 'berkas berbeda'}).")
+
+    # Metadata yang sesuai dengan cadangan tersebut.
     meta_cadangan = sumber.with_suffix(".json")
+    meta = None
     if meta_cadangan.exists():
-        shutil.copyfile(meta_cadangan, METADATA_PATH)
-    else:
+        try:
+            meta = json.loads(meta_cadangan.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            meta = None  # metadata cadangan rusak: dataset tetap dipulihkan tanpa catatan sumber
+    if meta is None:
         METADATA_PATH.unlink(missing_ok=True)
+    else:
+        meta["jumlah_baris"] = len(ulang)  # selaraskan dengan isi dataset sebenarnya
+        simpan_metadata(meta)
 
 
 # ==============================

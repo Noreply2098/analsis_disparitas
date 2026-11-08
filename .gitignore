@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# Lingkungan virtual dan rahasia
+.venv/
+venv/
+.env
+.streamlit/secrets.toml
+
+# Sistem operasi
+.DS_Store
+
+# File sementara dan backup lokal
+*.tmp
+*.bak
+
+# Data pengguna dan cadangan lokal (dibuat otomatis saat aplikasi berjalan).
+# Hapus baris ini hanya bila dataset memang sengaja ingin disimpan di GitHub.
+uploads/
