@@ -3,7 +3,34 @@
 Jalankan dengan:  streamlit run app.py
 """
 
+import sys
+from pathlib import Path
+
 import streamlit as st
+
+# ------------------------------------------------------------------
+# Muat ulang modul lokal bila filenya berubah.
+# Di server (mis. Streamlit Cloud) proses Python bisa tetap hidup setelah
+# kode di-update, sehingga utils/charts/laporan versi LAMA masih tersimpan
+# di memori dan memicu "ImportError: cannot import name ..." pada halaman
+# yang memakai fungsi baru. Blok ini membuang versi lama dari memori agar
+# halaman selalu memakai file terbaru.
+# ------------------------------------------------------------------
+_FOLDER = Path(__file__).resolve().parent
+_MODUL_LOKAL = ("utils", "charts", "laporan")
+_cap_waktu = getattr(sys, "_ria_cap_waktu", {})
+_berubah = False
+for _nama in _MODUL_LOKAL:
+    _berkas = _FOLDER / f"{_nama}.py"
+    if _berkas.exists():
+        _waktu = (_berkas.stat().st_mtime_ns, _berkas.stat().st_size)
+        if _cap_waktu.get(_nama) != _waktu:
+            _cap_waktu[_nama] = _waktu
+            _berubah = True
+if _berubah:
+    for _nama in _MODUL_LOKAL:
+        sys.modules.pop(_nama, None)
+sys._ria_cap_waktu = _cap_waktu
 
 st.set_page_config(
     page_title="Regional Income Analysis",
