@@ -3,3 +3,4 @@ pandas
 altair
 vl-convert-python
 openpyxl
+bcrypt>=4.1

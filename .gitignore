@@ -18,3 +18,6 @@ venv/
 # Data pengguna dan cadangan lokal (dibuat otomatis saat aplikasi berjalan).
 # Hapus baris ini hanya bila dataset memang sengaja ingin disimpan di GitHub.
 uploads/
+
+# Database akun pengguna (berisi hash password; jangan pernah di-commit)
+auth_data/

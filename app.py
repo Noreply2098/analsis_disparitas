@@ -17,7 +17,7 @@ import streamlit as st
 # halaman selalu memakai file terbaru.
 # ------------------------------------------------------------------
 _FOLDER = Path(__file__).resolve().parent
-_MODUL_LOKAL = ("utils", "charts", "laporan")
+_MODUL_LOKAL = ("utils", "charts", "laporan", "auth")
 _cap_waktu = getattr(sys, "_ria_cap_waktu", {})
 _berubah = False
 for _nama in _MODUL_LOKAL:
@@ -31,6 +31,8 @@ if _berubah:
     for _nama in _MODUL_LOKAL:
         sys.modules.pop(_nama, None)
 sys._ria_cap_waktu = _cap_waktu
+
+import auth  # noqa: E402  (harus setelah pembersihan modul lama di atas)
 
 st.set_page_config(
     page_title="Regional Income Analysis",
@@ -69,8 +71,10 @@ st.html(
     """
 )
 
-halaman = st.navigation(
-    {
+pengguna = auth.pengguna_aktif()
+
+if pengguna:
+    menu = {
         "MENU UTAMA": [
             st.Page("views/dashboard.py", title="Dashboard",
                     icon=":material/dashboard:", default=True),
@@ -84,11 +88,36 @@ halaman = st.navigation(
                     icon=":material/bar_chart:", url_path="visualisasi"),
             st.Page("views/tentang.py", title="Tentang Aplikasi",
                     icon=":material/info:", url_path="tentang"),
+        ],
+        "AKUN": [
+            st.Page("views/akun.py", title="Akun Saya",
+                    icon=":material/account_circle:", url_path="akun"),
+        ],
+    }
+else:
+    # Pengguna yang belum masuk hanya bisa membuka Login dan Registrasi;
+    # halaman data tidak terdaftar sehingga tidak bisa diakses lewat URL.
+    menu = {
+        "AKUN": [
+            st.Page("views/login.py", title="Masuk",
+                    icon=":material/login:", url_path="login", default=True),
+            st.Page("views/register.py", title="Daftar",
+                    icon=":material/person_add:", url_path="register"),
         ]
     }
-)
+
+halaman = st.navigation(menu)
 
 with st.sidebar:
+    if pengguna:
+        st.markdown(
+            f"**{auth.escape_markdown(pengguna['nama'])}**  \n"
+            f"@{auth.escape_markdown(pengguna['username'])}"
+        )
+        if st.button("Keluar", icon=":material/logout:", key="btn_keluar_sidebar"):
+            auth.keluar()
+            st.rerun()
     st.caption("Academic Research Project · Version 1.0")
 
+auth.tampilkan_toast()
 halaman.run()

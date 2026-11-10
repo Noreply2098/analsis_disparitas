@@ -15,6 +15,7 @@ streamlit run app.py
 
 ```
 app.py                  Pintu masuk aplikasi dan menu navigasi
+auth.py                 Login, registrasi, ubah password, sesi (bcrypt + SQLite)
 utils.py                Konfigurasi, validasi, duplikat, dataset, cadangan, filter, ekspor, Indeks Williamson
 charts.py               Grafik (Altair)
 laporan.py              Dokumen dan tombol cetak
@@ -31,12 +32,47 @@ views/                  Satu file per halaman
   analisis.py             Indeks Williamson, antarperiode, perbandingan wilayah, rincian, langkah
   visualisasi.py          Seluruh grafik (perbandingan wilayah, posisi, kontribusi, tren)
   tentang.py              Informasi aplikasi
+  login.py                Halaman masuk
+  register.py             Halaman pendaftaran akun
+  akun.py                 Profil, ubah password, dan keluar
 
+tests/test_auth.py      Pengujian autentikasi (pytest tests -q)
+
+auth_data/              Dibuat otomatis: users.db (akun pengguna, hanya berisi hash password)
 uploads/                Dibuat otomatis saat aplikasi berjalan (kosong saat pertama kali dibuka)
   dataset.csv             Dataset aktif
   metadata.json           Catatan sumber data dan riwayat impor terakhir
   cadangan/               Cadangan otomatis (10 terbaru, beserta catatan sumbernya)
 ```
+
+## Autentikasi (Login, Registrasi, Ubah Password, Logout)
+
+- Pengguna yang belum masuk hanya melihat halaman **Masuk** dan **Daftar**. Halaman data
+  tidak didaftarkan untuk mereka, sehingga tidak bisa dibuka lewat URL langsung.
+- **Registrasi:** nama lengkap, username, email, password, dan konfirmasi password. Semua
+  kesalahan ditampilkan sekaligus dengan pesan spesifik. Username dan email harus unik
+  (tidak peka huruf besar/kecil); duplikat ditolak, termasuk bila dua pendaftaran terjadi
+  bersamaan (batasan UNIQUE di database).
+- **Aturan:** username 3-30 karakter (huruf, angka, titik, garis bawah); email berformat
+  benar; password minimal 8 karakter, mengandung huruf dan angka, maksimal 72 byte (batas
+  bcrypt), dan tidak sama dengan username.
+- **Login:** username dan password divalidasi (tidak kosong, format benar). Bila gagal,
+  pesannya selalu `Username atau password salah.` tanpa membedakan username yang tidak
+  ada. Setelah 5 kali salah berturut-turut, akun dikunci 5 menit
+  (`MAKS_GAGAL`, `DURASI_KUNCI_MENIT` di `auth.py`). Tombol tampilkan/sembunyikan password
+  adalah ikon mata bawaan Streamlit pada kolom password.
+- **Ubah password** (halaman Akun Saya): wajib memasukkan password lama yang benar; password
+  baru harus memenuhi aturan di atas dan berbeda dari yang lama.
+- **Logout:** tombol Keluar di sidebar dan halaman Akun Saya. Seluruh isi sesi dihapus,
+  termasuk filter data.
+- **Penyimpanan password:** hanya hash bcrypt (salt acak, 12 putaran) di `auth_data/users.db`.
+  Password asli tidak pernah disimpan atau dicatat.
+- **Batasan:** (1) Sesi hilang saat halaman di-refresh penuh atau tab ditutup (Streamlit
+  tidak menyimpan cookie sendiri). (2) Seperti `uploads/`, `auth_data/` berada di sistem
+  berkas sementara pada Streamlit Community Cloud: akun hilang saat aplikasi restart. Untuk
+  penggunaan jangka panjang, pindahkan ke database persisten (mis. PostgreSQL/Supabase).
+  (3) Dataset bersifat bersama: semua pengguna yang masuk melihat data yang sama.
+  (4) Pendaftaran terbuka untuk siapa saja yang mengetahui URL aplikasi.
 
 ## Aturan data
 
