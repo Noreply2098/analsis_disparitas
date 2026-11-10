@@ -130,6 +130,65 @@ def grafik_batang(data, kolom, judul_nilai, warna_akhir, rata_rata=None,
 
 
 # ==============================
+# PERBANDINGAN ANTARWILAYAH (tertinggi / terendah ditandai)
+# ==============================
+def grafik_perbandingan(tabel, judul_nilai, urut="nilai", rata_rata=None, langkah=48):
+    """Batang horizontal perbandingan wilayah dari tabel_perbandingan().
+
+    Hanya wilayah dengan nilai tersedia yang digambar (data tidak tersedia tidak pernah
+    digambar sebagai nol). Nilai tertinggi dan terendah diberi warna berbeda.
+    """
+    d = tabel[tabel["Nilai"].notna()].copy()
+    if urut == "nama":
+        d = d.sort_values("Wilayah", key=lambda x: x.str.lower(), kind="stable")
+    else:
+        d = d.sort_values(["Nilai", "Wilayah"], ascending=[False, True], kind="stable")
+    d["Nama"] = d["Wilayah"].apply(_bungkus_nama)
+    urutan = d["Nama"].tolist()
+
+    pembagi, sufiks = satuan(d["Nilai"].abs().max())
+    d["Label"] = d["Nilai"].apply(lambda v: singkat(v, pembagi, sufiks))
+    d["Penanda"] = d["Keterangan"].where(d["Keterangan"].isin(["Tertinggi", "Terendah"]), "Lainnya")
+    if rata_rata is not None:
+        d["Rata"] = rata_rata
+
+    batas = d["Nilai"].max() * 1.3
+    skala_x = alt.Scale(domain=[0, batas if batas > 0 else 1], nice=False)
+    dasar = alt.Chart(d).encode(
+        y=alt.Y("Nama:N", sort=urutan, title=None, axis=_sumbu_nama()),
+        x=alt.X("Nilai:Q", title=None, axis=None, stack=None, scale=skala_x),
+    )
+
+    ada = [k for k in ("Tertinggi", "Terendah", "Lainnya") if k in set(d["Penanda"])]
+    warna = {"Tertinggi": BIRU_TUA, "Terendah": ORANYE, "Lainnya": BIRU_MUDA}
+    batang = dasar.mark_bar(cornerRadiusEnd=6, size=24).encode(
+        color=alt.Color(
+            "Penanda:N",
+            scale=alt.Scale(domain=ada, range=[warna[k] for k in ada]),
+            legend=alt.Legend(title=None, orient="top", labelFontSize=12,
+                              symbolType="square", labelColor=TEKS_PUDAR),
+        ),
+        tooltip=[
+            alt.Tooltip("Wilayah:N", title="Wilayah"),
+            alt.Tooltip("Nilai:Q", title=judul_nilai, format=",.0f"),
+            alt.Tooltip("Tahun:Q", title="Tahun", format="d"),
+        ],
+    )
+    label = dasar.mark_text(
+        align="left", dx=7, fontSize=13, fontWeight=600, color=TEKS
+    ).encode(text="Label:N")
+
+    lapisan = [batang]
+    if rata_rata is not None:
+        lapisan.append(
+            alt.Chart(d).mark_rule(strokeDash=[6, 4], color=ORANYE, strokeWidth=2)
+            .encode(x=alt.X("Rata:Q", scale=skala_x, axis=None, stack=None))
+        )
+    lapisan.append(label)
+    return gaya(alt.layer(*lapisan).properties(height=alt.Step(langkah)))
+
+
+# ==============================
 # BATANG BERDIVERGENSI (selisih terhadap rata-rata)
 # ==============================
 def grafik_selisih(data, kolom_selisih="Selisih", kolom_posisi="Posisi", langkah=48):

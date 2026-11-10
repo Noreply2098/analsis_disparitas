@@ -1,33 +1,36 @@
 import streamlit as st
 
-from utils import (
-    COL_PDRB,
-    COL_PENDUDUK,
-    beri_label_unik,
-    daftar_tahun,
-    duplikat_tahun,
-    kemungkinan_duplikat_tahun,
-    load_dataset,
-    page_header,
-    susun_analisis,
-    to_numeric_frame,
-    tren_williamson,
-)
 from charts import (
-    BIRU,
     BIRU_TUA,
     grafik_batang,
     grafik_indikator,
+    grafik_perbandingan,
     grafik_selisih,
     grafik_tren,
 )
-from laporan import (
-    blok_cetak,
+from laporan import blok_cetak
+from utils import (
+    baca_metadata,
+    aktifkan_konsisten,
+    daftar_tahun,
+    duplikat_tahun,
+    format_antarperiode,
+    hitung_antarperiode,
+    kemungkinan_duplikat_tahun,
+    keterangan_batas_kategori,
+    load_dataset,
+    narasi_perbandingan,
+    page_header,
+    pilih_pembanding,
+    satuan_indikator,
+    susun_analisis,
+    tabel_perbandingan,
+    tampilkan_filter,
 )
 
 page_header(
     "Visualisasi",
-    "Grafik PDRB per kapita, jumlah penduduk, posisi dan kontribusi tiap wilayah, "
+    "Grafik perbandingan antarwilayah, posisi dan kontribusi tiap wilayah, "
     "serta perkembangan Indeks Williamson.",
 )
 
@@ -37,32 +40,31 @@ if df is None:
     st.info(pesan)
     st.stop()
 
-tahun_list = daftar_tahun(df)
-if not tahun_list:
+if not daftar_tahun(df):
     st.info("Tidak ada data tahun yang valid untuk ditampilkan.")
     st.stop()
 
-tahun = st.selectbox("Tahun Pengamatan", tahun_list, index=len(tahun_list) - 1)
-
-data = to_numeric_frame(df)
-data = beri_label_unik(data[data["Tahun"] == tahun])
-
-df_pdrb = data.dropna(subset=[COL_PDRB])
-df_penduduk = data.dropna(subset=[COL_PENDUDUK])
-df_penduduk = df_penduduk[df_penduduk[COL_PENDUDUK] > 0]
-
-if df_pdrb.empty and df_penduduk.empty:
-    st.warning("Tidak ada data valid untuk ditampilkan.")
+# ---- Filter bersama (sama dengan halaman Data Pendapatan dan Analisis) ----
+f, df_f, info = tampilkan_filter(df)
+if df_f.empty:
     st.stop()
 
-dup = duplikat_tahun(df, tahun)
+tahun_list = daftar_tahun(df_f)
+if not tahun_list:
+    st.info("Tidak ada baris bertahun valid pada filter ini.")
+    st.stop()
+
+tahun = st.selectbox("Tahun Pengamatan", tahun_list, index=len(tahun_list) - 1)
+meta = baca_metadata()
+
+dup = duplikat_tahun(df_f, tahun)
 if not dup.empty:
     st.warning(
         f"Data tahun {tahun} memiliki **{len(dup)} baris duplikat** (wilayah sama), "
         "sehingga grafik dapat tidak akurat. Rapikan di halaman Data Pendapatan."
     )
 
-mungkin = kemungkinan_duplikat_tahun(df, tahun)
+mungkin = kemungkinan_duplikat_tahun(df_f, tahun)
 if not mungkin.empty:
     st.warning(
         f"Data tahun {tahun} memiliki **{len(mungkin)} baris kemungkinan duplikat** "
@@ -70,38 +72,45 @@ if not mungkin.empty:
         "Periksa di halaman Data Pendapatan."
     )
 
+cetak = st.container(border=True)  # tombol cetak diisi setelah indikator dipilih
+
+a, pesan_analisis = susun_analisis(df_f, tahun)
+
+# ==============================
+# PERBANDINGAN ANTARWILAYAH
+# ==============================
 with st.container(border=True):
-    st.markdown("**Cetak Laporan**")
-    blok_cetak(tahun, "grafik")
+    st.subheader(f"Perbandingan Antarwilayah Tahun {tahun}")
+    indikator, urut = pilih_pembanding()
+    satuan = satuan_indikator(indikator, meta)
+    tabel_p, catatan_p = tabel_perbandingan(df_f, tahun, indikator, urut, satuan, list(f.wilayah))
 
-a, pesan_analisis = susun_analisis(df, tahun)
-
-# ---- PDRB per kapita ----
-if not df_pdrb.empty:
-    with st.container(border=True):
-        st.subheader(f"PDRB Per Kapita Antarwilayah Tahun {tahun}")
-        st.altair_chart(grafik_batang(
-            df_pdrb, COL_PDRB, "PDRB Per Kapita", BIRU_TUA,
-            rata_rata=a.hasil.rata_rata if a else None,
-        ))
-        keterangan = "Label disingkat: rb = ribu, jt = juta, M = miliar. "
-        if a:
+    for c in catatan_p:
+        st.warning(c)
+    if tabel_p["Nilai"].notna().any():
+        rata = a.hasil.rata_rata if (a is not None and indikator == "PDRB per kapita") else None
+        st.altair_chart(grafik_perbandingan(tabel_p, indikator, urut, rata_rata=rata))
+        keterangan = (
+            f"Satuan: {satuan}. Label disingkat: rb = ribu, jt = juta, M = miliar. "
+            "Warna gelap menandai nilai tertinggi dan oranye nilai terendah."
+        )
+        if rata is not None:
             keterangan += (
-                f"Garis putus-putus oranye menunjukkan rata-rata PDRB per kapita "
-                f"(dibobot jumlah penduduk): {a.hasil.rata_rata:,.2f}."
+                f" Garis putus-putus oranye: rata-rata PDRB per kapita dibobot penduduk ({rata:,.2f})."
             )
         st.caption(keterangan)
+    else:
+        st.info(f"Tidak ada wilayah dengan data {indikator} yang tersedia pada tahun {tahun}.")
+    kosong = tabel_p.loc[tabel_p["Nilai"].isna(), "Wilayah"].tolist()
+    if kosong:
+        st.caption(
+            "Data tidak tersedia (tidak digambar, bukan bernilai nol): " + ", ".join(kosong) + "."
+        )
+    st.write(narasi_perbandingan(tabel_p, indikator))
 
-# ---- Jumlah penduduk ----
-if not df_penduduk.empty:
-    with st.container(border=True):
-        st.subheader(f"Jumlah Penduduk Antarwilayah Tahun {tahun}")
-        st.altair_chart(grafik_batang(
-            df_penduduk, COL_PENDUDUK, "Jumlah Penduduk (Jiwa)", BIRU,
-        ))
-        st.caption("Label disingkat: rb = ribu, jt = juta, M = miliar.")
-
-# ---- Grafik hasil analisis (posisi, kontribusi, indikator) ----
+# ==============================
+# GRAFIK HASIL ANALISIS (posisi, kontribusi, indikator)
+# ==============================
 if a is None:
     with st.container(border=True):
         st.subheader("Grafik Hasil Analisis")
@@ -131,18 +140,33 @@ else:
     with st.container(border=True):
         st.subheader(f"Posisi Indeks Williamson Tahun {tahun}")
         st.altair_chart(grafik_indikator(a.hasil.indeks))
-        st.caption(
-            f"{a.kategori}. Kategori pada aplikasi ini: rendah (< 0,3), sedang "
-            f"(0,3 – 0,5), tinggi (> 0,5)."
-        )
+        st.caption(f"{a.kategori}. {keterangan_batas_kategori()}")
 
-# ---- Tren ----
-tren = tren_williamson(df)
-if not tren.empty:
-    with st.container(border=True):
-        st.subheader("Perkembangan Indeks Williamson Antarwaktu")
+# ==============================
+# TREN ANTARPERIODE (sumber sama dengan tabel di halaman Analisis)
+# ==============================
+ap = hitung_antarperiode(df_f)
+tren = ap.untuk_grafik()
+with st.container(border=True):
+    st.subheader("Perkembangan Indeks Williamson Antarperiode")
+    if tren.empty:
+        st.info("Indeks belum dapat dihitung untuk tahun mana pun pada filter ini.")
+    else:
         st.altair_chart(grafik_tren(tren))
         st.caption(
-            "Pita warna menunjukkan kategori ketimpangan: hijau (< 0,3) rendah, "
-            "kuning (0,3 – 0,5) sedang, merah (> 0,5) tinggi."
+            keterangan_batas_kategori() + " Pita warna menunjukkan kategori ketimpangan."
         )
+    for peringatan in ap.peringatan:
+        st.warning(peringatan)
+    if not f.konsisten and not ap.perubahan_cakupan.empty:
+        st.button("Aktifkan cakupan wilayah konsisten", on_click=aktifkan_konsisten, key="btn_konsisten_visual")
+    with st.expander("Lihat tabel nilai (sama dengan tabel di halaman Analisis)"):
+        st.dataframe(
+            format_antarperiode(ap.tabel), hide_index=True,
+            column_config={"Catatan": st.column_config.Column(width="large")},
+        )
+
+# ---- Cetak (mengikuti filter, tahun, dan indikator di atas) ----
+with cetak:
+    st.markdown("**Cetak Laporan**")
+    blok_cetak(tahun, "grafik", f, indikator, urut)

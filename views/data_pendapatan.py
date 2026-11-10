@@ -9,28 +9,36 @@ from utils import (
     COL_TAHUN,
     COL_WILAYAH,
     MAKS_CADANGAN,
+    FilterData,
     baca_metadata,
     buat_cadangan,
     daftar_cadangan,
+    daftar_tahun,
     delete_dataset,
     duplikat,
+    filter_aktif,
     flash,
     hapus_duplikat,
     identitas_tidak_lengkap,
     info_dataset,
     ke_csv_bytes,
-    ke_excel_bytes,
+    ke_excel_dengan_metadata,
     kemungkinan_duplikat,
     kolom_dataset,
     load_dataset,
+    nama_file_ekspor,
     page_header,
     periksa_baris,
     pulihkan,
+    ringkasan_ekspor,
     save_dataset,
     show_flash,
     simpan_metadata,
+    tampilkan_filter,
     validasi_baris,
 )
+
+EXCEL_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 page_header(
     "Data Pendapatan",
@@ -41,7 +49,7 @@ show_flash()
 
 df, pesan = load_dataset()
 
-tab_tabel, tab_kelola = st.tabs(["Tabel Data", "Kelola Dataset"])
+tab_tabel, tab_ekspor, tab_kelola = st.tabs(["Tabel Data", "Filter & Ekspor", "Kelola Dataset"])
 
 # ==============================
 # TABEL DATA
@@ -176,6 +184,68 @@ with tab_tabel:
                     st.error(str(e))
 
 # ==============================
+# FILTER & EKSPOR
+# ==============================
+with tab_ekspor:
+    if df is None:
+        st.info(pesan)
+    else:
+        f, df_f, info_f = tampilkan_filter(df)
+        meta_ekspor = baca_metadata()
+        aktif = filter_aktif(f, info_f["opsi"])
+
+        if not df_f.empty:
+            with st.container(border=True):
+                st.subheader("Data Sesuai Filter")
+                ringkas_m = st.columns(3)
+                ringkas_m[0].metric("Baris sesuai filter", f"{len(df_f):,}")
+                ringkas_m[1].metric("Wilayah", f"{df_f[COL_WILAYAH].nunique():,}")
+                ringkas_m[2].metric("Dari total baris", f"{len(df):,}")
+                st.dataframe(df_f[kolom_dataset(df_f)], hide_index=True)
+                st.caption(
+                    "Tabel ini hanya untuk dilihat. Untuk mengubah data, gunakan tab Tabel Data "
+                    "(selalu menampilkan seluruh dataset, bukan hasil filter)."
+                )
+
+        with st.container(border=True):
+            st.subheader("Unduh Data")
+            pilihan = ["Data sesuai filter", "Seluruh dataset aktif"] if (aktif and not df_f.empty) else ["Seluruh dataset aktif"]
+            # Kunci mengikuti status filter agar pilihan awal otomatis "Data sesuai filter"
+            # begitu filter aktif, dan kembali ke seluruh dataset saat filter dikosongkan.
+            cakupan = st.radio(
+                "Cakupan unduhan", pilihan, horizontal=True,
+                key=f"cakupan_unduh_{'filter' if len(pilihan) > 1 else 'semua'}",
+            )
+            terfilter = cakupan == "Data sesuai filter"
+
+            df_x = df_f if terfilter else df
+            f_x = f if terfilter else FilterData()
+            data_x = df_x[kolom_dataset(df_x)]
+            ringkas_x = ringkasan_ekspor(data_x, len(df), f_x, info_f["opsi"], meta_ekspor)
+
+            tahun_x = daftar_tahun(data_x)
+            rentang_x = (
+                "-" if not tahun_x else (str(tahun_x[0]) if tahun_x[0] == tahun_x[-1] else f"{tahun_x[0]}–{tahun_x[-1]}")
+            )
+            st.caption(
+                f"Berkas akan berisi **{len(data_x):,} baris** "
+                f"({data_x[COL_WILAYAH].nunique():,} wilayah, tahun {rentang_x}). "
+                "Nilai dan nama kolom tidak diubah; berkas Excel memuat lembar Metadata "
+                "(tanggal ekspor, filter, periode, sumber, satuan)."
+            )
+            unduh_x = st.columns(2)
+            unduh_x[0].download_button(
+                "Unduh CSV", ke_csv_bytes(data_x),
+                file_name=nama_file_ekspor(data_x, f_x if terfilter else None, "csv"),
+                mime="text/csv", disabled=data_x.empty, key="unduh_data_csv",
+            )
+            unduh_x[1].download_button(
+                "Unduh Excel", ke_excel_dengan_metadata(data_x, ringkas_x),
+                file_name=nama_file_ekspor(data_x, f_x if terfilter else None, "xlsx"),
+                mime=EXCEL_MIME, disabled=data_x.empty, key="unduh_data_xlsx",
+            )
+
+# ==============================
 # KELOLA DATASET
 # ==============================
 with tab_kelola:
@@ -239,22 +309,8 @@ with tab_kelola:
                     flash("Catatan sumber data disimpan.")
                     st.rerun()
 
-    # ---- Unduh ----
-    if df is not None:
-        with st.container(border=True):
-            st.subheader("Unduh Dataset")
-            st.caption("Simpan salinan dataset saat ini ke perangkat.")
-            salinan = df[kolom_dataset(df)]
-            unduh = st.columns(2)
-            unduh[0].download_button(
-                "Unduh CSV", ke_csv_bytes(salinan),
-                file_name="dataset_pendapatan.csv", mime="text/csv",
-            )
-            unduh[1].download_button(
-                "Unduh Excel", ke_excel_bytes(salinan),
-                file_name="dataset_pendapatan.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            )
+    # ---- Unduh dipindahkan ----
+    st.caption("Unduh dataset (seluruhnya atau sesuai filter) ada di tab Filter & Ekspor.")
 
     # ---- Cadangan ----
     with st.container(border=True):

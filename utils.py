@@ -287,22 +287,27 @@ def periksa_baris(df: pd.DataFrame, offset: int = 1) -> HasilPeriksa:
 # DUPLIKAT (wilayah + tahun [+ kode/provinsi] yang sama)
 # ==============================
 
-def kunci_baris(df: pd.DataFrame) -> pd.Series:
-    """Kunci pembanding baris.
+def kunci_wilayah(df: pd.DataFrame) -> pd.Series:
+    """Identitas wilayah (tanpa tahun).
 
-    - Bila Kode Wilayah terisi, kode resmi itulah identitas utama (kode + tahun); nama
-      yang ditulis berbeda tidak menjadi masalah.
-    - Selain itu: nama (huruf kecil, spasi dirapikan) + tahun + provinsi (bila ada).
+    - Bila Kode Wilayah terisi, kode resmi itulah identitas utama; nama yang ditulis
+      berbeda tidak menjadi masalah.
+    - Selain itu: nama (huruf kecil, spasi dirapikan) + provinsi (bila ada).
     """
-    tahun = pd.to_numeric(df[COL_TAHUN], errors="coerce").astype("Int64").astype(str)
-    kunci = "nama:" + normalisasi_nama(df[COL_WILAYAH]).str.lower() + "|" + tahun
+    kunci = "nama:" + normalisasi_nama(df[COL_WILAYAH]).str.lower()
     ident = kolom_identitas(df)
     if COL_PROVINSI in ident:
         kunci = kunci + "|" + normalisasi_nama(df[COL_PROVINSI]).str.lower()
     if COL_KODE in ident:
         kode = normalisasi_nama(df[COL_KODE]).str.lower()
-        kunci = kunci.where(kode == "", "kode:" + kode + "|" + tahun)
+        kunci = kunci.where(kode == "", "kode:" + kode)
     return kunci
+
+
+def kunci_baris(df: pd.DataFrame) -> pd.Series:
+    """Kunci pembanding baris: identitas wilayah + tahun."""
+    tahun = pd.to_numeric(df[COL_TAHUN], errors="coerce").astype("Int64").astype(str)
+    return kunci_wilayah(df) + "|" + tahun
 
 
 def duplikat(df: pd.DataFrame) -> pd.DataFrame:
@@ -925,12 +930,29 @@ def daftar_tahun(df: pd.DataFrame) -> list[int]:
     return sorted(tahun.astype(int).unique().tolist())
 
 
+# Batas kategori adalah ketetapan aplikasi. SUMBER_BATAS_KATEGORI sengaja dikosongkan:
+# isi dengan rujukan literatur penelitian bila kategori dipakai dalam laporan akademik.
+BATAS_RENDAH, BATAS_TINGGI = 0.3, 0.5
+SUMBER_BATAS_KATEGORI = ""
+# Perubahan indeks di bawah ambang ini disebut "relatif stabil" (ketetapan praktis aplikasi).
+AMBANG_STABIL = 0.005
+
+
 def interpretasi(indeks: float) -> str:
-    if indeks < 0.3:
+    if indeks < BATAS_RENDAH:
         return "Ketimpangan rendah"
-    if indeks <= 0.5:
+    if indeks <= BATAS_TINGGI:
         return "Ketimpangan sedang"
     return "Ketimpangan tinggi"
+
+
+def keterangan_batas_kategori() -> str:
+    """Penjelasan batas kategori, termasuk status sumbernya."""
+    rendah, tinggi = (f"{x:g}".replace(".", ",") for x in (BATAS_RENDAH, BATAS_TINGGI))
+    teks = f"Kategori: rendah (< {rendah}), sedang ({rendah} – {tinggi}), tinggi (> {tinggi})."
+    if SUMBER_BATAS_KATEGORI:
+        return teks + f" Sumber batas: {SUMBER_BATAS_KATEGORI}."
+    return teks + " Batas ini ketetapan aplikasi; sumber rujukan belum dicantumkan."
 
 
 def data_valid_tahun(df: pd.DataFrame, tahun: int) -> pd.DataFrame:
@@ -967,16 +989,6 @@ def hitung_williamson(
     indeks = (data["Kontribusi"].sum() ** 0.5) / rata_rata
 
     return HasilWilliamson(indeks, rata_rata, total_penduduk, data), None
-
-
-def tren_williamson(df: pd.DataFrame) -> pd.DataFrame:
-    """Indeks Williamson untuk setiap tahun yang datanya memenuhi syarat."""
-    baris = []
-    for tahun in daftar_tahun(df):
-        hasil, _ = hitung_williamson(df, tahun)
-        if hasil is not None:
-            baris.append({"Tahun": tahun, "Indeks Williamson": hasil.indeks})
-    return pd.DataFrame(baris, columns=["Tahun", "Indeks Williamson"])
 
 
 # ==============================
@@ -1059,3 +1071,718 @@ def narasi_ringkasan(a: HasilAnalisis) -> str:
             f"dari total kontribusi)."
         )
     return teks
+
+
+# ======================================================================
+# FILTER DATA (tahun, wilayah, provinsi) — satu sumber untuk semua halaman
+# ======================================================================
+
+@dataclass(frozen=True)
+class FilterData:
+    """Pilihan filter. Nilai kosong berarti "semua"."""
+    tahun_awal: int | None = None
+    tahun_akhir: int | None = None
+    wilayah: tuple = ()
+    provinsi: tuple = ()
+    konsisten: bool = False  # hanya wilayah yang punya data valid di semua tahun terpilih
+
+    def kunci(self) -> tuple:
+        """Kunci yang dapat di-hash (untuk cache)."""
+        return (
+            self.tahun_awal, self.tahun_akhir,
+            tuple(sorted(self.wilayah, key=str.lower)),
+            tuple(sorted(self.provinsi, key=str.lower)),
+            self.konsisten,
+        )
+
+
+def opsi_filter(df: pd.DataFrame) -> dict:
+    """Pilihan filter yang diambil dari data yang benar-benar ada (bukan daftar permanen)."""
+    nama = normalisasi_nama(df[COL_WILAYAH])
+    pertama = {}
+    for asli, rapi in zip(nama.str.lower(), nama):
+        if asli and asli not in pertama:
+            pertama[asli] = rapi
+    provinsi = []
+    if COL_PROVINSI in df.columns:
+        provinsi = sorted({p for p in normalisasi_nama(df[COL_PROVINSI]) if p}, key=str.lower)
+    return {
+        "tahun": daftar_tahun(df),
+        "wilayah": sorted(pertama.values(), key=str.lower),
+        "provinsi": provinsi,
+    }
+
+
+def _data_valid_mask(d: pd.DataFrame) -> pd.Series:
+    """Baris dengan angka lengkap: PDRB >= 0 dan penduduk > 0 (d sudah numerik)."""
+    return (
+        d[COL_PDRB].notna() & d[COL_PENDUDUK].notna()
+        & (d[COL_PDRB] >= 0) & (d[COL_PENDUDUK] > 0)
+    )
+
+
+def batasi_cakupan_konsisten(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Sisakan wilayah yang memiliki data valid pada SETIAP tahun yang punya data valid.
+
+    Mengembalikan (data terbatasi, tabel wilayah yang dikecualikan beserta tahun yang kosong).
+    """
+    kolom_hasil = ["Wilayah", "Tahun tanpa data valid"]
+    d = to_numeric_frame(df)
+    d["_id"] = kunci_wilayah(d)
+    d["_label"] = label_wilayah_unik(d)
+    valid = d[_data_valid_mask(d)]
+    tahun_ada = sorted(valid[COL_TAHUN].dropna().astype(int).unique())
+    if not tahun_ada:
+        return df.iloc[0:0].copy(), pd.DataFrame(columns=kolom_hasil)
+
+    ada = {t: set(valid.loc[valid[COL_TAHUN] == t, "_id"]) for t in tahun_ada}
+    umum = set.intersection(*ada.values())
+    semua = set(d["_id"])
+    label = dict(zip(d["_id"], d["_label"]))
+
+    dikecualikan = []
+    for i in sorted(semua - umum, key=lambda x: label[x].lower()):
+        kosong = [str(t) for t in tahun_ada if i not in ada[t]]
+        dikecualikan.append({"Wilayah": label[i], "Tahun tanpa data valid": ", ".join(kosong)})
+    hasil = df[d["_id"].isin(umum).to_numpy()].copy()
+    return hasil, pd.DataFrame(dikecualikan, columns=kolom_hasil)
+
+
+def terapkan_filter_rinci(
+    df: pd.DataFrame, f: FilterData, opsi: dict | None = None
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Terapkan filter tanpa mengubah dataset asli.
+
+    Mengembalikan (data terfilter, wilayah yang dikecualikan oleh aturan cakupan konsisten).
+    Kriteria yang mencakup seluruh pilihan tidak menyaring apa pun, sehingga baris yang
+    tahunnya tidak valid tetap ikut selama filter tahun tidak mempersempit.
+    """
+    opsi = opsi or opsi_filter(df)
+    if f.tahun_awal is not None and f.tahun_akhir is not None and f.tahun_awal > f.tahun_akhir:
+        raise ValueError("Tahun awal tidak boleh lebih besar daripada tahun akhir.")
+
+    mask = pd.Series(True, index=df.index)
+    tahun = opsi["tahun"]
+    if (f.tahun_awal is not None and f.tahun_akhir is not None and tahun
+            and (f.tahun_awal, f.tahun_akhir) != (tahun[0], tahun[-1])):
+        angka = pd.to_numeric(df[COL_TAHUN], errors="coerce")
+        mask &= angka.between(f.tahun_awal, f.tahun_akhir)
+    if f.wilayah:
+        mask &= normalisasi_nama(df[COL_WILAYAH]).str.lower().isin({w.lower() for w in f.wilayah})
+    if f.provinsi and COL_PROVINSI in df.columns:
+        mask &= normalisasi_nama(df[COL_PROVINSI]).str.lower().isin({p.lower() for p in f.provinsi})
+
+    hasil = df[mask].copy()
+    if f.konsisten and not hasil.empty:
+        return batasi_cakupan_konsisten(hasil)
+    return hasil, pd.DataFrame(columns=["Wilayah", "Tahun tanpa data valid"])
+
+
+def terapkan_filter(df: pd.DataFrame, f: FilterData, opsi: dict | None = None) -> pd.DataFrame:
+    """Data hasil filter (lihat terapkan_filter_rinci)."""
+    return terapkan_filter_rinci(df, f, opsi)[0]
+
+
+def _daftar_singkat(nilai: list[str], maks: int = 4) -> str:
+    teks = ", ".join(nilai[:maks])
+    return teks + (f" (+{len(nilai) - maks} lainnya)" if len(nilai) > maks else "")
+
+
+def ringkasan_filter(
+    f: FilterData, opsi: dict, n_hasil: int, n_total: int, n_dikecualikan: int = 0
+) -> str:
+    """Satu baris ringkasan filter aktif agar pengguna tahu cakupan datanya."""
+    tahun = opsi["tahun"]
+    if f.tahun_awal is None or not tahun:
+        bagian_tahun = "Tahun: -"
+    elif (f.tahun_awal, f.tahun_akhir) == (tahun[0], tahun[-1]):
+        bagian_tahun = f"Tahun: semua ({tahun[0]}" + (f"–{tahun[-1]})" if len(tahun) > 1 else ")")
+    elif f.tahun_awal == f.tahun_akhir:
+        bagian_tahun = f"Tahun: {f.tahun_awal}"
+    else:
+        bagian_tahun = f"Tahun: {f.tahun_awal}–{f.tahun_akhir}"
+
+    if f.wilayah:
+        bagian_wilayah = f"Wilayah: {len(f.wilayah)} dari {len(opsi['wilayah'])} ({_daftar_singkat(list(f.wilayah))})"
+    else:
+        bagian_wilayah = f"Wilayah: semua ({len(opsi['wilayah'])})"
+
+    bagian = [bagian_tahun, bagian_wilayah]
+    if opsi["provinsi"]:
+        bagian.append(
+            f"Provinsi: {_daftar_singkat(list(f.provinsi))}" if f.provinsi
+            else f"Provinsi: semua ({len(opsi['provinsi'])})"
+        )
+    if f.konsisten:
+        bagian.append(
+            "Cakupan konsisten: aktif"
+            + (f" ({n_dikecualikan} wilayah dikecualikan)" if n_dikecualikan else "")
+        )
+    bagian.append(f"{n_hasil:,} dari {n_total:,} baris")
+    return " · ".join(bagian)
+
+
+def filter_aktif(f: FilterData, opsi: dict) -> bool:
+    """True bila filter mempersempit data dibanding seluruh dataset."""
+    tahun = opsi["tahun"]
+    sempit_tahun = bool(tahun) and f.tahun_awal is not None and (f.tahun_awal, f.tahun_akhir) != (tahun[0], tahun[-1])
+    return bool(sempit_tahun or f.wilayah or f.provinsi or f.konsisten)
+
+
+_KUNCI_FILTER = "_ria_filter"
+_PETA_FILTER = {
+    "ria_f_tahun_awal": "tahun_awal", "ria_f_tahun_akhir": "tahun_akhir",
+    "ria_f_wilayah": "wilayah", "ria_f_provinsi": "provinsi", "ria_f_konsisten": "konsisten",
+}
+
+
+def _simpan_filter(kunci_widget: str) -> None:
+    """Callback on_change: catat pilihan terbaru ke penyimpanan terpisah.
+
+    Pilihan disimpan di luar status widget karena Streamlit membuang status widget saat
+    pindah halaman; dari penyimpanan inilah widget diisi ulang pada setiap run.
+    """
+    tersimpan = dict(st.session_state.get(_KUNCI_FILTER, {}))
+    tersimpan[_PETA_FILTER[kunci_widget]] = st.session_state[kunci_widget]
+    st.session_state[_KUNCI_FILTER] = tersimpan
+
+
+def aktifkan_konsisten() -> None:
+    """Callback tombol: aktifkan cakupan wilayah konsisten pada filter bersama."""
+    st.session_state["ria_f_konsisten"] = True
+    _simpan_filter("ria_f_konsisten")
+
+
+def _setel_filter_awal(opsi: dict) -> None:
+    """Callback tombol Reset: kembalikan seluruh data (tanpa filter apa pun)."""
+    tahun = opsi["tahun"]
+    st.session_state["ria_f_tahun_awal"] = tahun[0] if tahun else None
+    st.session_state["ria_f_tahun_akhir"] = tahun[-1] if tahun else None
+    st.session_state["ria_f_wilayah"] = []
+    st.session_state["ria_f_provinsi"] = []
+    st.session_state["ria_f_konsisten"] = False
+    st.session_state[_KUNCI_FILTER] = {
+        "tahun_awal": st.session_state["ria_f_tahun_awal"],
+        "tahun_akhir": st.session_state["ria_f_tahun_akhir"],
+        "wilayah": [], "provinsi": [], "konsisten": False,
+    }
+
+
+def _awali_widget_filter(opsi: dict) -> None:
+    """Isi kunci widget dari pilihan tersimpan pada SETIAP run (bukan hanya bila kosong).
+
+    Nilai yang sudah tidak ada pada dataset dibuang, sehingga filter tidak pernah merujuk
+    wilayah/tahun yang hilang. Aman dipanggil di awal run karena perubahan pengguna sudah
+    dicatat oleh callback on_change sebelum skrip dijalankan.
+    """
+    tahun = opsi["tahun"]
+    tersimpan = st.session_state.get(_KUNCI_FILTER, {})
+
+    awal = tersimpan.get("tahun_awal")
+    akhir = tersimpan.get("tahun_akhir")
+    if awal not in tahun:
+        awal = tahun[0] if tahun else None
+    if akhir not in tahun:
+        akhir = tahun[-1] if tahun else None
+    wilayah = [w for w in tersimpan.get("wilayah", []) if w in opsi["wilayah"]]
+    provinsi = [p for p in tersimpan.get("provinsi", []) if p in opsi["provinsi"]]
+    konsisten = bool(tersimpan.get("konsisten", False))
+
+    st.session_state["ria_f_tahun_awal"] = awal
+    st.session_state["ria_f_tahun_akhir"] = akhir
+    st.session_state["ria_f_wilayah"] = wilayah
+    st.session_state["ria_f_provinsi"] = provinsi
+    st.session_state["ria_f_konsisten"] = konsisten
+    st.session_state[_KUNCI_FILTER] = {
+        "tahun_awal": awal, "tahun_akhir": akhir, "wilayah": wilayah,
+        "provinsi": provinsi, "konsisten": konsisten,
+    }
+
+
+def tampilkan_filter(df: pd.DataFrame) -> tuple[FilterData, pd.DataFrame, dict]:
+    """Panel filter bersama. Pilihan tersimpan sehingga sama di semua halaman.
+
+    Mengembalikan (filter, data terfilter, info) dengan info berisi opsi, ringkasan, dan
+    tabel wilayah yang dikecualikan. Jika hasilnya kosong, pesan ditampilkan di sini dan
+    pemanggil sebaiknya berhenti (data kosong tidak pernah dianggap nol).
+    """
+    opsi = opsi_filter(df)
+    tahun = opsi["tahun"]
+    _awali_widget_filter(opsi)
+
+    with st.container(border=True):
+        st.markdown("**Filter Data**")
+        if len(tahun) >= 1:
+            kolom_tahun = st.columns(2)
+            awal = kolom_tahun[0].selectbox(
+                "Tahun awal", tahun, key="ria_f_tahun_awal",
+                on_change=_simpan_filter, args=("ria_f_tahun_awal",),
+            )
+            akhir = kolom_tahun[1].selectbox(
+                "Tahun akhir", tahun, key="ria_f_tahun_akhir",
+                on_change=_simpan_filter, args=("ria_f_tahun_akhir",),
+            )
+        else:
+            awal = akhir = None
+
+        wilayah = st.multiselect(
+            "Wilayah", opsi["wilayah"], key="ria_f_wilayah", placeholder="Semua wilayah",
+            on_change=_simpan_filter, args=("ria_f_wilayah",),
+        )
+        provinsi = []
+        if len(opsi["provinsi"]) >= 2:  # hanya bila dataset mencakup beberapa provinsi
+            provinsi = st.multiselect(
+                "Provinsi", opsi["provinsi"], key="ria_f_provinsi", placeholder="Semua provinsi",
+                on_change=_simpan_filter, args=("ria_f_provinsi",),
+            )
+        konsisten = st.checkbox(
+            "Cakupan wilayah konsisten (hanya wilayah dengan data valid di semua tahun terpilih)",
+            key="ria_f_konsisten",
+            help="Membuat indeks antartahun dihitung dari kumpulan wilayah yang sama.",
+            on_change=_simpan_filter, args=("ria_f_konsisten",),
+        )
+        st.button("Reset filter", on_click=_setel_filter_awal, args=(opsi,))
+
+    f = FilterData(awal, akhir, tuple(wilayah), tuple(provinsi), bool(konsisten))
+    # Pilihan tidak valid: jelaskan, jangan diam-diam menukar atau mengabaikan.
+    if awal is not None and akhir is not None and awal > akhir:
+        st.error(
+            f"**Rentang tahun tidak valid:** tahun awal ({awal}) lebih besar daripada tahun akhir "
+            f"({akhir}). Ubah salah satunya agar tahun awal ≤ tahun akhir."
+        )
+        return f, df.iloc[0:0].copy(), {
+            "opsi": opsi, "ringkasan": "rentang tahun tidak valid",
+            "dikecualikan": pd.DataFrame(columns=["Wilayah", "Tahun tanpa data valid"]),
+        }
+
+    hasil, dikecualikan = terapkan_filter_rinci(df, f, opsi)
+    ringkasan = ringkasan_filter(f, opsi, len(hasil), len(df), len(dikecualikan))
+    st.caption("Filter aktif: " + ringkasan)
+
+    if f.konsisten and not dikecualikan.empty:
+        st.info(
+            f"**Cakupan konsisten aktif:** {len(dikecualikan)} wilayah tidak dipakai karena datanya "
+            f"tidak lengkap pada sebagian tahun ({_daftar_singkat(dikecualikan['Wilayah'].tolist())}). "
+            "Matikan opsi di atas untuk memakai semua wilayah."
+        )
+        with st.expander("Rincian wilayah yang dikecualikan"):
+            st.dataframe(dikecualikan, hide_index=True)
+    if hasil.empty:
+        st.warning(
+            "**Tidak ada data yang sesuai dengan filter.** Ubah pilihan filter atau tekan "
+            "Reset filter. Data kosong tidak dianggap bernilai nol."
+        )
+
+    return f, hasil, {"opsi": opsi, "ringkasan": ringkasan, "dikecualikan": dikecualikan}
+
+
+# ======================================================================
+# PERBANDINGAN ANTARWILAYAH
+# ======================================================================
+
+INDIKATOR_PERBANDINGAN = ["PDRB per kapita", "Jumlah penduduk", "PDRB (turunan)"]
+
+
+def satuan_indikator(indikator: str, metadata: dict | None = None) -> str:
+    """Satuan indikator. Satuan PDRB diambil dari catatan sumber bila sudah dicatat."""
+    satuan_pdrb = (metadata or {}).get("satuan", "").strip() or "satuan mengikuti sumber (belum dicatat)"
+    if indikator == "Jumlah penduduk":
+        return "jiwa"
+    if indikator == "PDRB (turunan)":
+        return f"PDRB per kapita × jiwa; satuan PDRB per kapita: {satuan_pdrb}"
+    return satuan_pdrb
+
+
+def label_wilayah_unik(df: pd.DataFrame) -> pd.Series:
+    """Label wilayah yang unik: nama kembar dengan identitas berbeda diberi provinsi/kode."""
+    nama = normalisasi_nama(df[COL_WILAYAH])
+    unik = pd.DataFrame({"n": nama.str.lower(), "k": kunci_wilayah(df)}).drop_duplicates("k")
+    kembar = set(unik.loc[unik["n"].duplicated(keep=False), "n"])
+    penanda = pd.Series("", index=df.index)
+    for c in (COL_PROVINSI, COL_KODE):
+        if c in df.columns:
+            penanda = penanda.where(penanda != "", normalisasi_nama(df[c]))
+    label = nama.copy()
+    m = nama.str.lower().isin(kembar) & (penanda != "")
+    label[m] = nama[m] + " (" + penanda[m] + ")"
+    return label
+
+
+def _nilai_indikator(d: pd.DataFrame, indikator: str) -> pd.Series:
+    if indikator == "Jumlah penduduk":
+        return d[COL_PENDUDUK].where(d[COL_PENDUDUK] > 0)
+    if indikator == "PDRB (turunan)":
+        return (d[COL_PDRB] * d[COL_PENDUDUK]).where((d[COL_PDRB] >= 0) & (d[COL_PENDUDUK] > 0))
+    return d[COL_PDRB].where(d[COL_PDRB] >= 0)
+
+
+def tabel_perbandingan(
+    df: pd.DataFrame, tahun: int, indikator: str,
+    urut: str = "nilai", satuan: str = "", wilayah_dipilih: list[str] | None = None,
+) -> tuple[pd.DataFrame, list[str]]:
+    """Bandingkan wilayah pada satu tahun.
+
+    Cakupan = semua wilayah pada data yang diberikan (tahun apa pun) ditambah
+    wilayah_dipilih. Wilayah tanpa nilai valid pada tahun itu TIDAK diberi nilai nol:
+    nilainya kosong (NaN) dan keterangannya "Data tidak tersedia".
+    Mengembalikan (tabel, catatan).
+    """
+    if indikator not in INDIKATOR_PERBANDINGAN:
+        raise ValueError(f"Indikator tidak dikenal: {indikator}")
+
+    d = to_numeric_frame(df)
+    d["_id"] = kunci_wilayah(d)
+    d["_label"] = label_wilayah_unik(d)
+    cakupan = d.drop_duplicates("_id")[["_id", "_label"]].reset_index(drop=True)
+
+    # Wilayah yang dipilih pengguna tetapi tidak punya baris sama sekali pada data ini.
+    ada = set(cakupan["_label"].str.lower())
+    tambahan = [w for w in (wilayah_dipilih or []) if w.lower() not in ada]
+    if tambahan:
+        cakupan = pd.concat(
+            [cakupan, pd.DataFrame({"_id": [f"tambahan:{w.lower()}" for w in tambahan], "_label": tambahan})],
+            ignore_index=True,
+        )
+
+    catatan = []
+    th = d[d[COL_TAHUN] == tahun].copy()
+    th["Nilai"] = _nilai_indikator(th, indikator)
+    th = th[th["Nilai"].notna()]
+    n_dup = int(th["_id"].duplicated().sum())
+    if n_dup:
+        th = th.drop_duplicates("_id")
+        catatan.append(f"{n_dup} baris duplikat diabaikan (dipakai baris pertama). Rapikan di halaman Data Pendapatan.")
+
+    hasil = cakupan.merge(th[["_id", "Nilai"]], on="_id", how="left")
+    hasil = hasil.rename(columns={"_label": "Wilayah"}).drop(columns="_id")
+    hasil["Tahun"] = tahun
+    hasil["Indikator"] = indikator
+    hasil["Satuan"] = satuan
+
+    tersedia = hasil["Nilai"].notna()
+    hasil["Peringkat"] = hasil["Nilai"].rank(ascending=False, method="min").astype("Int64")
+    if tersedia.any():
+        tertinggi, terendah = hasil["Nilai"].max(), hasil["Nilai"].min()
+        hasil["Selisih dari tertinggi"] = hasil["Nilai"] - tertinggi
+    else:
+        tertinggi = terendah = None
+        hasil["Selisih dari tertinggi"] = np.nan
+
+    def keterangan(v):
+        if pd.isna(v):
+            return "Data tidak tersedia"
+        if tertinggi == terendah:
+            return ""
+        return "Tertinggi" if v == tertinggi else "Terendah" if v == terendah else ""
+
+    hasil["Keterangan"] = hasil["Nilai"].map(keterangan)
+
+    if urut == "nama":
+        hasil = hasil.sort_values("Wilayah", key=lambda x: x.str.lower(), kind="stable")
+    else:
+        hasil = hasil.sort_values(["Nilai", "Wilayah"], ascending=[False, True], na_position="last", kind="stable")
+
+    kolom = ["Wilayah", "Tahun", "Indikator", "Nilai", "Satuan", "Peringkat", "Selisih dari tertinggi", "Keterangan"]
+    return hasil[kolom].reset_index(drop=True), catatan
+
+
+def narasi_perbandingan(tabel: pd.DataFrame, indikator: str) -> str:
+    """Penjelasan deskriptif yang hanya memuat hal yang didukung angka pada tabel."""
+    ada = tabel[tabel["Nilai"].notna()]
+    tahun = int(tabel["Tahun"].iloc[0]) if len(tabel) else None
+    if ada.empty:
+        return f"Tidak ada wilayah dengan data {indikator} yang tersedia pada tahun {tahun}."
+    tinggi, rendah = ada.loc[ada["Nilai"].idxmax()], ada.loc[ada["Nilai"].idxmin()]
+    teks = f"Pada tahun {tahun}, {indikator} tertinggi di **{tinggi['Wilayah']}** ({tinggi['Nilai']:,.0f})"
+    if len(ada) > 1 and tinggi["Nilai"] != rendah["Nilai"]:
+        teks += f" dan terendah di **{rendah['Wilayah']}** ({rendah['Nilai']:,.0f}); selisihnya {tinggi['Nilai'] - rendah['Nilai']:,.0f}"
+    teks += "."
+    kosong = tabel.loc[tabel["Nilai"].isna(), "Wilayah"].tolist()
+    if kosong:
+        teks += f" Data tidak tersedia untuk: {_daftar_singkat(kosong, 6)}."
+    return teks
+
+
+def tabel_lintas_tahun(df: pd.DataFrame, indikator: str) -> pd.DataFrame:
+    """Indikator per wilayah (baris) dan tahun (kolom). Sel tanpa data valid dibiarkan kosong."""
+    d = to_numeric_frame(df)
+    d["_id"] = kunci_wilayah(d)
+    d["_label"] = label_wilayah_unik(d)
+    d["Nilai"] = _nilai_indikator(d, indikator)
+    d = d[d[COL_TAHUN].notna()]
+    d[COL_TAHUN] = d[COL_TAHUN].astype(int)
+    label = d.drop_duplicates("_id").set_index("_id")["_label"]
+    pivot = d.drop_duplicates(["_id", COL_TAHUN]).pivot(index="_id", columns=COL_TAHUN, values="Nilai")
+    pivot.index = pivot.index.map(label)
+    pivot.index.name = "Wilayah"
+    return pivot.sort_index(key=lambda x: x.str.lower())
+
+
+# ======================================================================
+# INDEKS WILLIAMSON ANTARPERIODE
+# ======================================================================
+
+KOLOM_ANTARPERIODE = [
+    "Tahun", "Indeks Williamson", "Jumlah wilayah", "Kategori",
+    "Perubahan", "Perubahan (%)", "Arah", "Catatan",
+]
+
+
+@dataclass
+class HasilAntarperiode:
+    tabel: pd.DataFrame            # satu baris per tahun
+    perubahan_cakupan: pd.DataFrame  # wilayah yang bertambah/hilang antar tahun
+    peringatan: list[str]
+
+    def untuk_grafik(self) -> pd.DataFrame:
+        """Tahun yang memiliki indeks (sumber yang sama dengan tabel)."""
+        t = self.tabel.dropna(subset=["Indeks Williamson"])
+        return t[["Tahun", "Indeks Williamson"]].reset_index(drop=True)
+
+
+def hitung_antarperiode(df: pd.DataFrame) -> HasilAntarperiode:
+    """Hitung Indeks Williamson terpisah untuk setiap tahun pada data yang diberikan.
+
+    Memakai hitung_williamson (sumber hasil yang sama dengan halaman Analisis). Tahun
+    dengan data tidak memadai ditandai dan tidak dipaksakan menghasilkan indeks.
+    Perubahan dihitung terhadap tahun terdekat sebelumnya yang memiliki indeks; bila
+    kumpulan wilayahnya berbeda, hal itu dicatat dan diberi peringatan.
+    """
+    d = to_numeric_frame(df)
+    d["_id"] = kunci_wilayah(d)
+    d["_label"] = label_wilayah_unik(d)
+    label = dict(zip(d["_id"], d["_label"]))
+
+    baris, cakupan, peringatan = [], [], []
+    acuan = None  # (tahun, indeks, himpunan id) terakhir yang memiliki indeks
+    tahun_sebelumnya = None
+
+    for t in daftar_tahun(d):
+        dt = d[d[COL_TAHUN] == t]
+        ids = set(dt.loc[_data_valid_mask(dt), "_id"])
+        hasil, galat = hitung_williamson(dt, t)
+        catatan = []
+        iw = np.nan
+
+        if hasil is None:
+            catatan.append("Data tidak memadai: " + galat.rstrip(".") if galat else "Data tidak memadai")
+        else:
+            iw = float(hasil.indeks)
+
+        perubahan = pct = np.nan
+        arah = "—"
+        if hasil is not None and acuan is not None:
+            t_ref, iw_ref, ids_ref = acuan
+            perubahan = iw - iw_ref
+            pct = perubahan / iw_ref * 100 if iw_ref != 0 else np.nan
+            arah = "Relatif stabil" if abs(perubahan) < AMBANG_STABIL else ("Naik" if perubahan > 0 else "Turun")
+            if tahun_sebelumnya is not None and t_ref != tahun_sebelumnya:
+                catatan.append(f"Dibandingkan dengan {t_ref} (tahun {tahun_sebelumnya} tidak memiliki indeks)")
+            elif t - t_ref > 1:
+                catatan.append(f"Dibandingkan dengan {t_ref} (tidak ada data tahun di antaranya)")
+            tambah, hilang = ids - ids_ref, ids_ref - ids
+            if tambah or hilang:
+                catatan.append(
+                    f"Cakupan berbeda dari {t_ref}: +{len(tambah)} / −{len(hilang)} wilayah, "
+                    "indeks tidak sepenuhnya sebanding"
+                )
+                cakupan.append({
+                    "Tahun": t, "Dibanding": t_ref,
+                    "Wilayah bertambah": ", ".join(sorted(label[i] for i in tambah)),
+                    "Wilayah hilang": ", ".join(sorted(label[i] for i in hilang)),
+                })
+        if hasil is not None:
+            acuan = (t, iw, ids)
+        tahun_sebelumnya = t
+
+        baris.append({
+            "Tahun": t, "Indeks Williamson": iw, "Jumlah wilayah": len(ids),
+            "Kategori": interpretasi(iw) if hasil is not None else "—",
+            "Perubahan": perubahan, "Perubahan (%)": pct, "Arah": arah,
+            "Catatan": "; ".join(catatan),
+        })
+
+    tabel = pd.DataFrame(baris, columns=KOLOM_ANTARPERIODE)
+    if cakupan:
+        peringatan.append(
+            "Kumpulan wilayah berbeda antartahun, sehingga indeks tidak sepenuhnya sebanding. "
+            "Aktifkan \"Cakupan wilayah konsisten\" pada filter untuk membandingkan wilayah yang sama."
+        )
+    if not tabel.empty and tabel["Indeks Williamson"].isna().any():
+        tahun_kosong = tabel.loc[tabel["Indeks Williamson"].isna(), "Tahun"].tolist()
+        peringatan.append("Indeks tidak dapat dihitung untuk tahun: " + ", ".join(map(str, tahun_kosong)) + " (data tidak memadai).")
+    return HasilAntarperiode(
+        tabel, pd.DataFrame(cakupan, columns=["Tahun", "Dibanding", "Wilayah bertambah", "Wilayah hilang"]), peringatan
+    )
+
+
+def narasi_antarperiode(tabel: pd.DataFrame) -> str:
+    """Penjelasan deskriptif perkembangan indeks (tanpa menyimpulkan penyebab)."""
+    ada = tabel.dropna(subset=["Indeks Williamson"])
+    if len(ada) < 2:
+        return "Perbandingan antarperiode memerlukan indeks pada minimal dua tahun."
+    awal, akhir = ada.iloc[0], ada.iloc[-1]
+    selisih = akhir["Indeks Williamson"] - awal["Indeks Williamson"]
+    arah = "relatif stabil" if abs(selisih) < AMBANG_STABIL else ("naik" if selisih > 0 else "turun")
+    teks = (
+        f"Dari tahun {int(awal['Tahun'])} ({awal['Indeks Williamson']:.4f}) ke tahun {int(akhir['Tahun'])} "
+        f"({akhir['Indeks Williamson']:.4f}), Indeks Williamson {arah}"
+    )
+    if arah != "relatif stabil":
+        teks += f" sebesar {abs(selisih):.4f}"
+    teks += "."
+    if len(ada) > 2:
+        tinggi, rendah = ada.loc[ada["Indeks Williamson"].idxmax()], ada.loc[ada["Indeks Williamson"].idxmin()]
+        teks += (f" Nilai tertinggi pada tahun {int(tinggi['Tahun'])} ({tinggi['Indeks Williamson']:.4f}) "
+                 f"dan terendah pada tahun {int(rendah['Tahun'])} ({rendah['Indeks Williamson']:.4f}).")
+    return teks + " Perubahan indeks saja tidak menjelaskan penyebab perubahan disparitas."
+
+
+# ======================================================================
+# EKSPOR (CSV / Excel dengan metadata)
+# ======================================================================
+
+def nama_file_ekspor(df: pd.DataFrame, f: FilterData | None, ekstensi: str, awalan: str = "ria_data") -> str:
+    """Nama berkas informatif, mis. ria_data_2023_2025.xlsx atau ria_data_2024_2wilayah.csv."""
+    bagian = [awalan]
+    tahun = daftar_tahun(df) if len(df) else []
+    if tahun:
+        bagian.append(str(tahun[0]) if tahun[0] == tahun[-1] else f"{tahun[0]}_{tahun[-1]}")
+    if f is not None and f.wilayah:
+        bagian.append(f"{len(f.wilayah)}wilayah")
+    if f is not None and f.provinsi:
+        bagian.append(f"{len(f.provinsi)}provinsi")
+    return "_".join(bagian) + "." + ekstensi.lstrip(".")
+
+
+def ringkasan_ekspor(
+    df_ekspor: pd.DataFrame, n_dataset: int, f: FilterData | None, opsi: dict | None,
+    metadata: dict | None = None, judul: str = "Data pendapatan regional",
+    tahun_ekspor: list[int] | None = None,
+) -> pd.DataFrame:
+    """Tabel Keterangan/Nilai untuk lembar Metadata pada berkas Excel."""
+    meta = metadata or {}
+    opsi = opsi or {"tahun": [], "wilayah": [], "provinsi": []}
+    belum = "belum dicatat"
+    if tahun_ekspor is not None:
+        tahun = sorted(tahun_ekspor)
+    else:
+        tahun = daftar_tahun(df_ekspor) if len(df_ekspor) and COL_TAHUN in df_ekspor.columns else []
+    aktif = f is not None and filter_aktif(f, opsi)
+
+    def isi(kunci):
+        return str(meta.get(kunci, "")).strip() or belum
+
+    baris = [
+        ("Judul", judul),
+        ("Aplikasi", "Regional Income Analysis (RIA)"),
+        ("Tanggal ekspor", datetime.now().strftime("%d-%m-%Y %H:%M")),
+        ("Cakupan unduhan", "Data sesuai filter" if aktif else "Seluruh dataset aktif"),
+        ("Filter tahun", (f"{f.tahun_awal}–{f.tahun_akhir}" if f is not None and f.tahun_awal is not None else "semua")),
+        ("Filter wilayah", (", ".join(f.wilayah) if f is not None and f.wilayah else "semua")),
+        ("Filter provinsi", (", ".join(f.provinsi) if f is not None and f.provinsi else "semua")),
+        ("Cakupan wilayah konsisten", "ya" if f is not None and f.konsisten else "tidak"),
+        ("Periode data pada berkas", (f"{tahun[0]}–{tahun[-1]}" if len(tahun) > 1 else (str(tahun[0]) if tahun else "-"))),
+        ("Jumlah baris pada berkas", len(df_ekspor)),
+        ("Jumlah wilayah pada berkas", int(normalisasi_nama(df_ekspor[COL_WILAYAH]).str.lower().nunique()) if len(df_ekspor) and COL_WILAYAH in df_ekspor.columns else "-"),
+        ("Jumlah baris dataset aktif", n_dataset),
+        ("Sumber data", isi("sumber")),
+        ("Tautan sumber", isi("tautan")),
+        ("Tanggal pengambilan data", isi("tanggal_pengambilan")),
+        ("Satuan PDRB per kapita", isi("satuan")),
+        ("Satuan jumlah penduduk", "jiwa"),
+        ("Catatan revisi", isi("catatan_revisi")),
+        ("Berkas terakhir diimpor", isi("nama_berkas")),
+        ("Catatan", "Nilai pada lembar Data tidak diubah dari dataset aktif; nama kolom dipertahankan."),
+    ]
+    return pd.DataFrame(baris, columns=["Keterangan", "Nilai"])
+
+
+def ke_excel_dengan_metadata(
+    df: pd.DataFrame, ringkasan: pd.DataFrame, nama_data: str = "Data", nama_meta: str = "Metadata"
+) -> bytes:
+    """Berkas Excel dua lembar: data (header tebal, baris judul dibekukan) dan metadata."""
+    from openpyxl.styles import Font
+
+    buf = io.BytesIO()
+    with pd.ExcelWriter(buf, engine="openpyxl") as penulis:
+        df.to_excel(penulis, index=False, sheet_name=nama_data)
+        ringkasan.to_excel(penulis, index=False, sheet_name=nama_meta)
+        for nama, tabel in ((nama_data, df), (nama_meta, ringkasan)):
+            ws = penulis.sheets[nama]
+            ws.freeze_panes = "A2"
+            for sel in ws[1]:
+                sel.font = Font(bold=True)
+            for i, kolom in enumerate(tabel.columns, start=1):
+                panjang = max([len(str(kolom))] + [len(str(v)) for v in tabel[kolom].head(200)])
+                ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = min(max(panjang + 2, 10), 60)
+    return buf.getvalue()
+
+
+# ======================================================================
+# PILIHAN PERBANDINGAN (indikator & urutan) — tersimpan antarhalaman
+# ======================================================================
+
+URUTAN_PERBANDINGAN = {"Nilai (tertinggi dulu)": "nilai", "Nama wilayah (A–Z)": "nama"}
+_KUNCI_PEMBANDING = "_ria_pembanding"
+
+
+def _simpan_pembanding(kunci_widget: str, nama: str) -> None:
+    tersimpan = dict(st.session_state.get(_KUNCI_PEMBANDING, {}))
+    tersimpan[nama] = st.session_state[kunci_widget]
+    st.session_state[_KUNCI_PEMBANDING] = tersimpan
+
+
+def pilih_pembanding() -> tuple[str, str]:
+    """Pilihan indikator dan urutan perbandingan; sama di halaman Analisis dan Visualisasi."""
+    tersimpan = st.session_state.get(_KUNCI_PEMBANDING, {})
+    indikator = tersimpan.get("indikator", INDIKATOR_PERBANDINGAN[0])
+    if indikator not in INDIKATOR_PERBANDINGAN:
+        indikator = INDIKATOR_PERBANDINGAN[0]
+    urut = tersimpan.get("urut", list(URUTAN_PERBANDINGAN)[0])
+    if urut not in URUTAN_PERBANDINGAN:
+        urut = list(URUTAN_PERBANDINGAN)[0]
+    st.session_state["ria_f_indikator"] = indikator
+    st.session_state["ria_f_urut"] = urut
+    st.session_state[_KUNCI_PEMBANDING] = {"indikator": indikator, "urut": urut}
+
+    kolom = st.columns(2)
+    indikator = kolom[0].selectbox(
+        "Indikator", INDIKATOR_PERBANDINGAN, key="ria_f_indikator",
+        on_change=_simpan_pembanding, args=("ria_f_indikator", "indikator"),
+        help="PDRB (turunan) = PDRB per kapita × jumlah penduduk; bukan angka PDRB resmi dari sumber.",
+    )
+    label_urut = kolom[1].selectbox(
+        "Urutan", list(URUTAN_PERBANDINGAN), key="ria_f_urut",
+        on_change=_simpan_pembanding, args=("ria_f_urut", "urut"),
+    )
+    return indikator, URUTAN_PERBANDINGAN[label_urut]
+
+
+# ======================================================================
+# FORMAT TAMPILAN (dipakai halaman dan dokumen cetak agar angkanya sama)
+# ======================================================================
+
+def format_antarperiode(tabel: pd.DataFrame) -> pd.DataFrame:
+    """Tabel antarperiode sebagai teks siap tampil. Nilai kosong tidak ditampilkan sebagai nol."""
+    d = tabel.copy()
+    d["Indeks Williamson"] = d["Indeks Williamson"].map(lambda v: "Tidak dihitung" if pd.isna(v) else f"{v:.4f}")
+    d["Perubahan"] = d["Perubahan"].map(lambda v: "—" if pd.isna(v) else f"{v:+.4f}")
+    d["Perubahan (%)"] = d["Perubahan (%)"].map(lambda v: "—" if pd.isna(v) else f"{v:+.2f}%")
+    return d
+
+
+def format_perbandingan(tabel: pd.DataFrame) -> pd.DataFrame:
+    """Tabel perbandingan sebagai teks siap tampil; data kosong tertulis 'Data tidak tersedia'."""
+    d = tabel.copy()
+    d["Nilai"] = d["Nilai"].map(lambda v: "Data tidak tersedia" if pd.isna(v) else f"{v:,.0f}")
+    d["Peringkat"] = d["Peringkat"].map(lambda v: "—" if pd.isna(v) else str(int(v)))
+    d["Selisih dari tertinggi"] = d["Selisih dari tertinggi"].map(lambda v: "—" if pd.isna(v) else f"{v:,.0f}")
+    return d.drop(columns=["Tahun", "Indikator"])
+
+
+def format_lintas_tahun(pivot: pd.DataFrame) -> pd.DataFrame:
+    """Tabel wilayah × tahun sebagai teks; sel tanpa data = 'Data tidak tersedia'."""
+    d = pivot.copy()
+    d.columns = [str(c) for c in d.columns]
+    return d.apply(lambda kol: kol.map(lambda v: "Data tidak tersedia" if pd.isna(v) else f"{v:,.0f}"))

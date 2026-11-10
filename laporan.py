@@ -16,14 +16,28 @@ from utils import (
     COL_TAHUN,
     COL_WILAYAH,
     DATASET_PATH,
+    FilterData,
+    baca_metadata,
     beri_label_unik,
+    format_antarperiode,
+    format_perbandingan,
+    hitung_antarperiode,
+    keterangan_batas_kategori,
     load_dataset,
+    narasi_antarperiode,
+    narasi_perbandingan,
     narasi_ringkasan,
+    opsi_filter,
+    ringkasan_filter,
+    satuan_indikator,
     susun_analisis,
+    tabel_perbandingan,
+    terapkan_filter,
+    terapkan_filter_rinci,
     to_numeric_frame,
-    tren_williamson,
 )
 from charts import (
+    grafik_perbandingan,
     BIRU,
     BIRU_TUA,
     grafik_batang,
@@ -182,8 +196,8 @@ def bagian_analisis(df, tahun: int) -> str:
         f'<div class="status status-{kelas}">{_e(a.kategori)} pada tahun {tahun}</div>',
         delta,
         "</div>",
-        '<p class="ket">Kategori pada aplikasi ini: rendah (&lt; 0,3), sedang (0,3 – 0,5), '
-        "tinggi (&gt; 0,5). Semakin besar nilai indeks, semakin timpang PDRB per kapita antarwilayah.</p>",
+        f'<p class="ket">{_e(keterangan_batas_kategori())} Semakin besar nilai indeks, '
+        "semakin timpang PDRB per kapita antarwilayah.</p>",
         f"<p>{_tebal(narasi_ringkasan(a))}</p>",
     ]
 
@@ -205,6 +219,27 @@ def bagian_analisis(df, tahun: int) -> str:
         sel("Rasio Tertinggi/Terendah", f"{a.rasio:.2f}×" if a.rasio else "—"),
         "</div>",
     ]
+
+    # ---- perkembangan indeks antarperiode ----
+    ap = hitung_antarperiode(df)
+    if len(ap.tabel) > 1:
+        out.append("<h2>Perkembangan Indeks Williamson Antarperiode</h2>")
+        out.append(f"<p>{_tebal(narasi_antarperiode(ap.tabel))}</p>")
+        for w in ap.peringatan:
+            out.append(f'<p class="catatan">{_e(w)}</p>')
+        tampil = format_antarperiode(ap.tabel)
+        kolom_ap = ["Tahun", "Indeks Williamson", "Jumlah wilayah", "Kategori", "Perubahan", "Perubahan (%)", "Arah", "Catatan"]
+        out.append("<table><thead><tr>" + "".join(f"<th>{_e(k)}</th>" for k in kolom_ap) + "</tr></thead><tbody>")
+        for _, r in tampil.iterrows():
+            out.append("<tr>" + "".join(
+                f'<td class="t">{_e(r[k])}</td>' if k in ("Kategori", "Arah", "Catatan") else f"<td>{_e(r[k])}</td>"
+                for k in kolom_ap) + "</tr>")
+        out.append("</tbody></table>")
+        out.append(
+            f'<p class="ket">{_e(keterangan_batas_kategori())} Perubahan dihitung terhadap tahun terdekat '
+            f"sebelumnya yang memiliki indeks; perubahan di bawah ambang 0,005 disebut relatif stabil "
+            f"(ketetapan aplikasi).</p>"
+        )
 
     # ---- tabel rincian ----
     baris = []
@@ -262,33 +297,28 @@ def bagian_analisis(df, tahun: int) -> str:
 # BAGIAN: GRAFIK
 # ==============================
 
-def bagian_grafik(df, tahun: int) -> str:
-    data = to_numeric_frame(df)
-    data = beri_label_unik(data[data["Tahun"] == tahun])
-
-    df_pdrb = data.dropna(subset=[COL_PDRB])
-    df_penduduk = data.dropna(subset=[COL_PENDUDUK])
-    df_penduduk = df_penduduk[df_penduduk[COL_PENDUDUK] > 0]
-
+def bagian_grafik(
+    df, tahun: int, indikator: str = "PDRB per kapita", urut: str = "nilai",
+    metadata: dict | None = None, wilayah_dipilih: list[str] | None = None,
+) -> str:
     a, _ = susun_analisis(df, tahun)
     out = []
 
-    if not df_pdrb.empty:
-        ket = "Label disingkat: rb = ribu, jt = juta, M = miliar."
-        if a:
-            ket += (f" Garis putus-putus oranye menunjukkan rata-rata PDRB per kapita "
-                    f"(dibobot jumlah penduduk): {a.hasil.rata_rata:,.2f}.")
+    # ---- perbandingan antarwilayah (indikator terpilih) ----
+    satuan = satuan_indikator(indikator, metadata)
+    tabel_p, catatan = tabel_perbandingan(df, tahun, indikator, urut, satuan, wilayah_dipilih)
+    if tabel_p["Nilai"].notna().any():
+        rata = a.hasil.rata_rata if (a and indikator == "PDRB per kapita") else None
+        ket = f"Satuan: {satuan}. Label disingkat: rb = ribu, jt = juta, M = miliar."
+        if rata is not None:
+            ket += f" Garis putus-putus oranye: rata-rata PDRB per kapita dibobot penduduk ({rata:,.2f})."
+        kosong = tabel_p.loc[tabel_p["Nilai"].isna(), "Wilayah"].tolist()
+        if kosong:
+            ket += " Data tidak tersedia (tidak digambar): " + ", ".join(kosong) + "."
+        ket += " " + " ".join(catatan)
         out.append(_gambar(
-            grafik_batang(df_pdrb, COL_PDRB, "PDRB Per Kapita", BIRU_TUA,
-                          rata_rata=a.hasil.rata_rata if a else None, langkah=38),
-            500, f"PDRB Per Kapita Antarwilayah Tahun {tahun}", ket,
-        ))
-
-    if not df_penduduk.empty:
-        out.append(_gambar(
-            grafik_batang(df_penduduk, COL_PENDUDUK, "Jumlah Penduduk (Jiwa)", BIRU, langkah=38),
-            500, f"Jumlah Penduduk Antarwilayah Tahun {tahun}",
-            "Label disingkat: rb = ribu, jt = juta, M = miliar.",
+            grafik_perbandingan(tabel_p, indikator, urut, rata_rata=rata, langkah=38),
+            500, f"Perbandingan {indikator} Antarwilayah Tahun {tahun}", ket.strip(),
         ))
 
     if a:
@@ -306,17 +336,15 @@ def bagian_grafik(df, tahun: int) -> str:
         ))
         out.append(_gambar(
             grafik_indikator(a.hasil.indeks), 650,
-            f"Posisi Indeks Williamson Tahun {tahun}",
-            f"{a.kategori}. Kategori: rendah (< 0,3), sedang (0,3 – 0,5), tinggi (> 0,5).",
+            f"Posisi Indeks Williamson Tahun {tahun}", f"{a.kategori}. {keterangan_batas_kategori()}",
         ))
 
-    tren = tren_williamson(df)
+    ap = hitung_antarperiode(df)
+    tren = ap.untuk_grafik()
     if not tren.empty:
-        out.append(_gambar(
-            grafik_tren(tren), 600, "Perkembangan Indeks Williamson Antarwaktu",
-            "Pita warna menunjukkan kategori ketimpangan: hijau (< 0,3) rendah, "
-            "kuning (0,3 – 0,5) sedang, merah (> 0,5) tinggi.",
-        ))
+        ket_tren = keterangan_batas_kategori() + " Pita warna menunjukkan kategori ketimpangan."
+        ket_tren += " " + " ".join(ap.peringatan)
+        out.append(_gambar(grafik_tren(tren), 600, "Perkembangan Indeks Williamson Antarperiode", ket_tren.strip()))
 
     if not out:
         return '<p class="catatan">Tidak ada data valid untuk ditampilkan.</p>'
@@ -332,21 +360,37 @@ def _versi_data() -> int:
 
 
 @st.cache_data(show_spinner="Menyiapkan dokumen cetak...", max_entries=20)
-def _bagian(tahun: int, versi_data: int) -> tuple[str, str]:
+def _bagian(
+    tahun: int, versi_data: int, kunci_filter: tuple, indikator: str, urut: str
+) -> tuple[str, str, str]:
+    """Bagian analisis dan grafik dari data yang SUDAH difilter, plus ringkasan filternya."""
     df, _ = load_dataset()
-    return bagian_analisis(df, tahun), bagian_grafik(df, tahun)
+    awal, akhir, wilayah, provinsi, konsisten = kunci_filter
+    f = FilterData(awal, akhir, wilayah, provinsi, konsisten)
+    opsi = opsi_filter(df)
+    df_f, dikecualikan = terapkan_filter_rinci(df, f, opsi)
+    ringkasan = ringkasan_filter(f, opsi, len(df_f), len(df), len(dikecualikan))
+    meta = baca_metadata()
+    return (
+        bagian_analisis(df_f, tahun),
+        bagian_grafik(df_f, tahun, indikator, urut, meta, list(wilayah)),
+        ringkasan,
+    )
 
 
-def dokumen_cetak(tahun: int) -> dict[str, str]:
-    """Tiga jenis dokumen cetak untuk satu tahun: analisis, grafik, dan lengkap."""
-    analisis, grafik = _bagian(tahun, _versi_data())
+def dokumen_cetak(
+    tahun: int, f: FilterData, indikator: str = "PDRB per kapita", urut: str = "nilai"
+) -> dict[str, str]:
+    """Tiga jenis dokumen cetak untuk satu tahun dan satu filter: analisis, grafik, lengkap."""
+    analisis, grafik, ringkasan = _bagian(tahun, _versi_data(), f.kunci(), indikator, urut)
     sub = f"{NAMA_APLIKASI} · Indeks Williamson · Tahun {tahun}"
+    cakupan = f'<p class="ket"><strong>Cakupan data (filter):</strong> {_e(ringkasan)}</p>'
     return {
-        "analisis": _dokumen("Laporan Analisis Disparitas Pendapatan Regional", sub, analisis),
-        "grafik": _dokumen("Laporan Visualisasi Data Pendapatan Regional", sub, grafik),
+        "analisis": _dokumen("Laporan Analisis Disparitas Pendapatan Regional", sub, cakupan + analisis),
+        "grafik": _dokumen("Laporan Visualisasi Data Pendapatan Regional", sub, cakupan + grafik),
         "lengkap": _dokumen(
             "Laporan Analisis dan Visualisasi Pendapatan Regional", sub,
-            '<h1 class="bagian">Bagian 1 — Analisis</h1>' + analisis
+            cakupan + '<h1 class="bagian">Bagian 1 — Analisis</h1>' + analisis
             + '<h1 class="bagian">Bagian 2 — Grafik</h1>' + grafik,
         ),
     }
@@ -403,12 +447,14 @@ def tombol_cetak(label: str, dokumen_html: str, utama: bool = False) -> None:
         components.html(isi, height=46)
 
 
-def blok_cetak(tahun: int, bagian: str) -> None:
+def blok_cetak(
+    tahun: int, bagian: str, f: FilterData, indikator: str = "PDRB per kapita", urut: str = "nilai"
+) -> None:
     """Tampilkan dua tombol cetak: satu bagian (analisis/grafik) dan gabungan.
 
     bagian: "analisis" atau "grafik".
     """
-    dok = dokumen_cetak(tahun)
+    dok = dokumen_cetak(tahun, f, indikator, urut)
     nama = "Analisis" if bagian == "analisis" else "Grafik"
 
     kol = st.columns(2)
@@ -417,6 +463,6 @@ def blok_cetak(tahun: int, bagian: str) -> None:
     with kol[1]:
         tombol_cetak("🖨️ Cetak Analisis + Grafik", dok["lengkap"], utama=True)
     st.caption(
-        f"Dokumen cetak dibuat untuk tahun {tahun}. Di dialog cetak, pilih "
-        f"\"Simpan sebagai PDF\" jika ingin berkas PDF."
+        f"Dokumen cetak mengikuti filter data yang sedang aktif dan dibuat untuk tahun {tahun}. "
+        f"Di dialog cetak, pilih \"Simpan sebagai PDF\" jika ingin berkas PDF."
     )

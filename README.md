@@ -15,7 +15,7 @@ streamlit run app.py
 
 ```
 app.py                  Pintu masuk aplikasi dan menu navigasi
-utils.py                Konfigurasi, validasi, duplikat, dataset, cadangan, Indeks Williamson
+utils.py                Konfigurasi, validasi, duplikat, dataset, cadangan, filter, ekspor, Indeks Williamson
 charts.py               Grafik (Altair)
 laporan.py              Dokumen dan tombol cetak
 requirements.txt        Daftar library
@@ -27,9 +27,9 @@ README.md               Dokumen ini
 views/                  Satu file per halaman
   dashboard.py            Ringkasan data dan status analisis
   import_data.py          Import CSV/Excel (validasi, duplikat) dan input manual
-  data_pendapatan.py      Tabel data (edit) dan pengelolaan dataset (catatan sumber, unduh, cadangan)
-  analisis.py             Hasil Indeks Williamson, ringkasan, rincian, langkah
-  visualisasi.py          Seluruh grafik
+  data_pendapatan.py      Tabel data (edit), filter & ekspor, dan pengelolaan dataset (sumber, cadangan)
+  analisis.py             Indeks Williamson, antarperiode, perbandingan wilayah, rincian, langkah
+  visualisasi.py          Seluruh grafik (perbandingan wilayah, posisi, kontribusi, tren)
   tentang.py              Informasi aplikasi
 
 uploads/                Dibuat otomatis saat aplikasi berjalan (kosong saat pertama kali dibuka)
@@ -78,6 +78,44 @@ uploads/                Dibuat otomatis saat aplikasi berjalan (kosong saat pert
   pemangkasan, dan kondisi sebelum pemulihan ikut dicadangkan.
 - Catatan sumber (sumber, tautan, tanggal pengambilan, satuan, catatan revisi) disimpan
   di `metadata.json` dan ikut dicadangkan/dipulihkan.
+
+## Filter, ekspor, perbandingan, dan antarperiode (Tahap 2)
+
+- **Filter bersama** (tahun awal/akhir, wilayah, provinsi bila ada lebih dari satu) muncul di
+  halaman Data Pendapatan (tab Filter & Ekspor), Analisis, dan Visualisasi. Pilihannya sama di
+  ketiga halaman selama sesi berjalan. Opsi diambil dari data yang ada, filter tidak mengubah
+  dataset, dan hasil kosong ditampilkan sebagai pesan (bukan angka nol). Tombol Reset filter
+  mengembalikan seluruh data. Tab Tabel Data (untuk mengedit) selalu menampilkan seluruh
+  dataset agar menyimpan hasil edit tidak menimpa dataset dengan data terfilter.
+- **Ekspor:** CSV dan Excel untuk seluruh dataset atau data sesuai filter, dengan jumlah baris
+  ditampilkan sebelum diunduh dan nama berkas informatif (mis. `ria_data_2023_2025.xlsx`).
+  Berkas Excel berisi lembar Data dan lembar Metadata (tanggal ekspor, filter, periode, jumlah
+  baris, sumber, satuan, catatan revisi). Tabel antarperiode, perbandingan, dan rincian
+  perhitungan di halaman Analisis juga dapat diunduh.
+- **Perbandingan antarwilayah:** indikator PDRB per kapita, jumlah penduduk, dan PDRB (turunan)
+  untuk satu tahun. *PDRB (turunan)* = PDRB per kapita × jumlah penduduk; ini bukan angka PDRB
+  resmi dari sumber dan dapat berbeda karena pembulatan atau definisi penduduk. Wilayah tanpa
+  data pada tahun itu ditulis "Data tidak tersedia" (tidak digambar dan tidak bernilai nol).
+  Indeks Williamson bukan indikator per wilayah: ia ukuran agregat untuk kumpulan wilayah.
+- **Indeks Williamson antarperiode:** dihitung terpisah untuk setiap tahun dengan rumus yang
+  sama seperti halaman Analisis. Tabel (selisih absolut, persentase, arah) dan grafik tren
+  berasal dari satu hasil hitung yang sama. Aturan yang dipakai:
+  - Tahun yang punya kurang dari dua wilayah dengan data valid ditandai "Data tidak memadai"
+    dan tidak dipaksakan menghasilkan indeks.
+  - Perubahan dihitung terhadap tahun terdekat sebelumnya yang memiliki indeks; bila ada
+    tahun yang dilewati, hal itu dicatat.
+  - Bila kumpulan wilayah berbeda antartahun, tabel mencatat wilayah yang bertambah/hilang
+    dan memperingatkan bahwa indeks tidak sepenuhnya sebanding. Opsi **Cakupan wilayah
+    konsisten** (satu klik dari peringatan) hanya memakai wilayah dengan data valid di semua
+    tahun terpilih dan menjelaskan wilayah yang dikecualikan. Opsi ini nonaktif secara
+    bawaan agar Reset filter benar-benar menampilkan seluruh data.
+  - Perubahan di bawah 0,005 disebut "relatif stabil". Ambang ini ketetapan aplikasi
+    (`AMBANG_STABIL` di `utils.py`), bukan standar baku.
+- **Batas kategori** (rendah < 0,3, sedang 0,3–0,5, tinggi > 0,5) adalah ketetapan aplikasi.
+  Sumber rujukannya belum dicantumkan; isi `SUMBER_BATAS_KATEGORI` di `utils.py` dengan
+  literatur yang dipakai penelitian agar tercantum di seluruh tampilan dan dokumen cetak.
+- Dokumen cetak mengikuti filter, tahun, dan indikator yang sedang aktif, dan mencantumkan
+  ringkasan filternya.
 
 ## Catatan repository dan deployment
 
