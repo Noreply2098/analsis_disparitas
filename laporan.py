@@ -10,12 +10,13 @@ import re
 import streamlit as st
 import vl_convert as vlc
 
+from storage import kunci_pemilik
 from utils import (
     COL_PDRB,
     COL_PENDUDUK,
     COL_TAHUN,
     COL_WILAYAH,
-    DATASET_PATH,
+    path_dataset,
     FilterData,
     baca_metadata,
     beri_label_unik,
@@ -355,13 +356,15 @@ def bagian_grafik(
 # DOKUMEN SIAP CETAK (di-cache)
 # ==============================
 
-def _versi_data() -> int:
-    return DATASET_PATH.stat().st_mtime_ns if DATASET_PATH.exists() else 0
+def _versi_data() -> tuple:
+    """Kunci cache: pemilik data (pengguna atau sesi tamu) + waktu ubah dataset, agar hasil
+    cetak satu pemilik tidak pernah dipakai pemilik lain."""
+    return (kunci_pemilik(), path_dataset().stat().st_mtime_ns if path_dataset().exists() else 0)
 
 
 @st.cache_data(show_spinner="Menyiapkan dokumen cetak...", max_entries=20)
 def _bagian(
-    tahun: int, versi_data: int, kunci_filter: tuple, indikator: str, urut: str
+    tahun: int, versi_data: tuple, kunci_filter: tuple, indikator: str, urut: str
 ) -> tuple[str, str, str]:
     """Bagian analisis dan grafik dari data yang SUDAH difilter, plus ringkasan filternya."""
     df, _ = load_dataset()

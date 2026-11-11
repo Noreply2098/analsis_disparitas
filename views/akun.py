@@ -18,7 +18,12 @@ with st.container(border=True):
     kiri.text_input("Nama lengkap", value=data["nama"], disabled=True)
     kanan.text_input("Username", value=data["username"], disabled=True)
     kiri.text_input("Email", value=data["email"], disabled=True)
-    kanan.text_input("Terdaftar sejak", value=data["dibuat_pada"][:10], disabled=True)
+    kanan.text_input("Terdaftar sejak", value=data["dibuat_pada"], disabled=True)
+    st.text_input(
+        "Peran",
+        value="Administrator" if data["peran"] == auth.PERAN_ADMIN else "Pengguna",
+        disabled=True,
+    )
 
 # Nomor pada key diganti setelah sukses agar isian form kembali kosong.
 nomor = st.session_state.get("_pw_form_no", 0)
@@ -42,6 +47,8 @@ with st.container(border=True):
             for pesan in errors:
                 st.error(pesan)
         else:
+            # Perubahan password mencabut semua sesi tetap; perangkat ini diberi sesi baru.
+            auth.terbitkan_cookie(data["id"])
             st.session_state["_pw_sukses"] = True
             st.session_state["_pw_form_no"] = nomor + 1
             st.rerun()

@@ -15,7 +15,11 @@ streamlit run app.py
 
 ```
 app.py                  Pintu masuk aplikasi dan menu navigasi
-auth.py                 Login, registrasi, ubah password, sesi (bcrypt + SQLite)
+auth.py                 Login, registrasi, sesi cookie, undangan, administrasi (bcrypt)
+mailer.py               Pengiriman email SMTP (kode reset password)
+kelola_akun.py          Alat CLI pengelola: buat kode reset dari terminal
+db.py                   Koneksi database + skema (PostgreSQL via DATABASE_URL, atau SQLite)
+storage.py              Folder data per pengguna + salinan ke database
 utils.py                Konfigurasi, validasi, duplikat, dataset, cadangan, filter, ekspor, Indeks Williamson
 charts.py               Grafik (Altair)
 laporan.py              Dokumen dan tombol cetak
@@ -35,44 +39,119 @@ views/                  Satu file per halaman
   login.py                Halaman masuk
   register.py             Halaman pendaftaran akun
   akun.py                 Profil, ubah password, dan keluar
+  lupa_password.py        Minta kode reset dan atur password baru
+  kelola_pengguna.py      Khusus admin: pengguna, kode undangan, kode reset
 
-tests/test_auth.py      Pengujian autentikasi (pytest tests -q)
+tests/test_auth.py      Pengujian (pip install -r requirements-dev.txt; pytest tests -q)
 
-auth_data/              Dibuat otomatis: users.db (akun pengguna, hanya berisi hash password)
-uploads/                Dibuat otomatis saat aplikasi berjalan (kosong saat pertama kali dibuka)
+auth_data/              Dibuat otomatis bila tanpa DATABASE_URL: ria.db (SQLite lokal)
+uploads/pengguna/<id>/   Dibuat otomatis: data pengguna yang masuk (tamu: folder temp sementara) saat aplikasi berjalan (kosong saat pertama kali dibuka)
   dataset.csv             Dataset aktif
   metadata.json           Catatan sumber data dan riwayat impor terakhir
   cadangan/               Cadangan otomatis (10 terbaru, beserta catatan sumbernya)
 ```
 
-## Autentikasi (Login, Registrasi, Ubah Password, Logout)
+## Autentikasi, Akun, dan Data Pengguna
 
-- Pengguna yang belum masuk hanya melihat halaman **Masuk** dan **Daftar**. Halaman data
-  tidak didaftarkan untuk mereka, sehingga tidak bisa dibuka lewat URL langsung.
-- **Registrasi:** nama lengkap, username, email, password, dan konfirmasi password. Semua
-  kesalahan ditampilkan sekaligus dengan pesan spesifik. Username dan email harus unik
-  (tidak peka huruf besar/kecil); duplikat ditolak, termasuk bila dua pendaftaran terjadi
-  bersamaan (batasan UNIQUE di database).
-- **Aturan:** username 3-30 karakter (huruf, angka, titik, garis bawah); email berformat
-  benar; password minimal 8 karakter, mengandung huruf dan angka, maksimal 72 byte (batas
-  bcrypt), dan tidak sama dengan username.
-- **Login:** username dan password divalidasi (tidak kosong, format benar). Bila gagal,
-  pesannya selalu `Username atau password salah.` tanpa membedakan username yang tidak
-  ada. Setelah 5 kali salah berturut-turut, akun dikunci 5 menit
-  (`MAKS_GAGAL`, `DURASI_KUNCI_MENIT` di `auth.py`). Tombol tampilkan/sembunyikan password
-  adalah ikon mata bawaan Streamlit pada kolom password.
-- **Ubah password** (halaman Akun Saya): wajib memasukkan password lama yang benar; password
-  baru harus memenuhi aturan di atas dan berbeda dari yang lama.
-- **Logout:** tombol Keluar di sidebar dan halaman Akun Saya. Seluruh isi sesi dihapus,
-  termasuk filter data.
-- **Penyimpanan password:** hanya hash bcrypt (salt acak, 12 putaran) di `auth_data/users.db`.
-  Password asli tidak pernah disimpan atau dicatat.
-- **Batasan:** (1) Sesi hilang saat halaman di-refresh penuh atau tab ditutup (Streamlit
-  tidak menyimpan cookie sendiri). (2) Seperti `uploads/`, `auth_data/` berada di sistem
-  berkas sementara pada Streamlit Community Cloud: akun hilang saat aplikasi restart. Untuk
-  penggunaan jangka panjang, pindahkan ke database persisten (mis. PostgreSQL/Supabase).
-  (3) Dataset bersifat bersama: semua pengguna yang masuk melihat data yang sama.
-  (4) Pendaftaran terbuka untuk siapa saja yang mengetahui URL aplikasi.
+### Fitur
+- **Masuk / Daftar / Keluar / Ubah password / Lupa password.** Akun bersifat opsional: aplikasi
+  bisa langsung dipakai tanpa login (mode tamu, lihat di bawah). Halaman Akun Saya dan Kelola
+  Pengguna hanya ada untuk pengguna yang masuk (dan admin), sehingga tidak bisa dibuka lewat URL.
+- **Validasi dan pesan error spesifik** pada semua form. Login gagal selalu menampilkan
+  `Username atau password salah.` (tidak membedakan username yang tidak ada). Setelah 5 kali
+  salah berturut-turut akun dikunci 5 menit. Tombol tampilkan/sembunyikan password adalah ikon
+  mata bawaan Streamlit di kolom password.
+- **Password** hanya disimpan sebagai hash bcrypt (12 putaran, salt acak). Aturan password baru:
+  minimal 8 karakter, ada huruf dan angka, maksimal 72 byte, tidak sama dengan username.
+- **Username dan email unik** tanpa membedakan huruf besar/kecil (dijaga juga oleh batasan UNIQUE
+  database terhadap pendaftaran bersamaan).
+
+### Akun bertahan saat server restart (database)
+Aplikasi memakai SQLAlchemy. Bila `DATABASE_URL` diisi, data akun, sesi, kode undangan, dan data
+pengguna disimpan di **PostgreSQL** (Supabase, Neon, dsb.) sehingga tidak hilang saat restart.
+Bila tidak diisi, dipakai SQLite lokal `auth_data/ria.db` (hanya untuk pengembangan; di hosting
+dengan disk sementara, isinya hilang saat restart). Tabel dibuat otomatis.
+
+Langkah di Streamlit Community Cloud:
+1. Buat database PostgreSQL gratis (mis. Supabase atau Neon) dan salin connection string-nya.
+   Bila koneksi langsung ditolak (Supabase memakai IPv6 untuk koneksi langsung), pakai
+   connection string **Session pooler**.
+2. Di *App settings -> Secrets* tempel (lihat `.streamlit/secrets.toml.example`):
+   `DATABASE_URL = "postgresql://USER:PASSWORD@HOST:5432/DBNAME?sslmode=require"`
+3. Reboot aplikasi, lalu **segera daftarkan akun pertama**: akun pertama otomatis menjadi
+   Administrator.
+
+### Sesi bertahan saat halaman di-refresh (cookie)
+Setelah masuk, server membuat token acak dan menyimpannya di cookie `ria_sesi` (berlaku 7 hari,
+`SameSite=Lax`, plus `Secure` di HTTPS). Database hanya menyimpan **hash sha256** token, jadi
+isi database tidak bisa dipakai untuk menyamar. Token dicabut saat Keluar, saat password diubah
+(semua perangkat), saat akun dinonaktifkan, dan otomatis saat kedaluwarsa. Catatan: cookie ini
+diatur lewat JavaScript sehingga tidak bisa ber-flag `HttpOnly`; itu batasan Streamlit.
+
+### Pendaftaran tidak lagi terbuka
+- Akun pertama menjadi **Administrator**. Sesudahnya pendaftar wajib memasukkan **kode undangan
+  sekali pakai** yang dibuat Administrator di halaman *Kelola Pengguna* (masa berlaku 1-30 hari;
+  database hanya menyimpan hash kode, jadi kode hanya terlihat saat dibuat).
+- Administrator dapat mengaktifkan/menonaktifkan akun (sesinya langsung diakhiri) dan mengubah
+  peran. Administrator tidak dapat menonaktifkan atau menurunkan dirinya sendiri.
+- Untuk pendaftaran bebas tanpa kode, isi secret `REGISTRASI_TERBUKA = "true"`.
+
+### Data dipisah per pengguna
+Setiap pengguna punya dataset, metadata, dan cadangan sendiri di `uploads/pengguna/<id>/`;
+pengguna lain tidak pernah membacanya (kunci cache dokumen cetak juga memuat ID pengguna).
+Isi folder disalin sebagai satu arsip zip ke tabel `berkas_pengguna` setiap kali berubah dan
+dipulihkan otomatis saat folder lokal kosong (mis. setelah restart). Batas: 30 MB per pengguna
+setelah dikompres; bila terlampaui, muncul peringatan di sidebar.
+
+### Mode tamu: bisa dipakai tanpa login, data tidak disimpan
+Membuka link langsung menampilkan aplikasi (Dashboard), bukan halaman login. Menu **Masuk**,
+**Daftar**, dan **Lupa Password** tersedia di sidebar (bagian AKUN) tetapi opsional.
+
+- Tamu bisa mengimpor data, menganalisis, dan membuat visualisasi. Banner "Mode tamu" di setiap
+  halaman menjelaskan bahwa data dan cadangan hanya sementara.
+- Data tamu hanya ada di **folder sementara milik sesi itu** (direktori temp server). Data itu
+  tidak pernah masuk ke database maupun folder `uploads/`, tidak terbaca sesi lain, hilang saat
+  halaman di-refresh atau ditutup, dan folder yang lama tidak dipakai (6 jam) dihapus otomatis.
+- Tamu tidak memerlukan database: aplikasi tetap bisa dipakai tamu walau database sedang
+  tidak terjangkau.
+- Bila tamu **mendaftar lalu masuk di sesi yang sama**, data tamunya otomatis dipindahkan ke akun
+  **hanya jika akun itu belum punya data** (data akun tidak pernah ditimpa); sesudahnya data
+  tersimpan permanen.
+
+### Lupa password
+Halaman **Lupa Password** memakai kode reset sekali pakai (format `XXXX-XXXX`) dalam dua langkah:
+1. **Minta kode.** Masukkan email akun; kode dikirim lewat email (berlaku 15 menit, maksimal
+   3 permintaan per jam per akun). Pesan di layar selalu sama baik email terdaftar maupun tidak,
+   sehingga halaman ini tidak bisa dipakai menebak email yang terdaftar.
+2. **Buat password baru.** Masukkan email, kode, dan password baru (aturan sama seperti
+   registrasi). Setelah berhasil, kode hangus, kunci akun dibuka, dan semua sesi di semua
+   perangkat diakhiri.
+
+Keamanan kode: hanya hash sha256 yang disimpan; setelah 5 tebakan salah kode hangus; meminta
+kode baru membatalkan kode lama; akun nonaktif tidak bisa direset.
+
+**Pengiriman email (SMTP)** diatur lewat secrets (lihat `.streamlit/secrets.toml.example`):
+`SMTP_HOST`, `SMTP_PORT` (587), `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`, dan `SMTP_SECURITY`
+(`starttls`, `ssl`, atau `none`). Contoh Gmail: host `smtp.gmail.com`, port 587, `starttls`,
+dan **App Password** (bukan password Gmail biasa; perlu verifikasi 2 langkah). Email dikirim di
+latar belakang; bila gagal, galatnya dicatat di log server.
+
+**Tanpa SMTP**, halaman Lupa Password memberi tahu pengguna untuk meminta kode kepada
+administrator: admin membuka *Kelola Pengguna*, memilih pengguna, lalu menekan **Buat kode reset
+password** (berlaku 60 menit, hanya tampil sekali) dan mengirimkannya lewat jalur aman.
+
+**Admin satu-satunya lupa password dan SMTP belum aktif?** Jalankan dari komputer Anda dengan
+`DATABASE_URL` yang sama dengan aplikasi:
+
+```
+DATABASE_URL="postgresql://..." python kelola_akun.py kode-reset NAMA_ADMIN
+```
+
+### Yang belum ada
+- **Data lama** yang sebelumnya tersimpan langsung di `uploads/dataset.csv` (sebelum fitur akun)
+  tidak dipindahkan otomatis ke pengguna mana pun.
+- **Verifikasi email saat registrasi.** Alamat email diperiksa formatnya dan keunikannya, tetapi
+  belum dibuktikan milik pendaftar (pendaftaran sudah dibatasi kode undangan).
 
 ## Aturan data
 
@@ -167,8 +246,9 @@ uploads/                Dibuat otomatis saat aplikasi berjalan (kosong saat pert
   ```
 - Jangan pernah memasukkan token atau kredensial ke commit. Simpan di
   `.streamlit/secrets.toml` (sudah di-ignore) atau pengaturan Secrets platform deployment.
-- Cadangan lokal tidak melindungi dari semua risiko kehilangan. Pada layanan hosting yang
-  sistem berkasnya sementara (mis. Streamlit Community Cloud), isi `uploads/` hilang saat
-  aplikasi di-restart. Unduh dataset secara berkala, atau gunakan penyimpanan persisten.
+- Pada layanan hosting yang sistem berkasnya sementara (mis. Streamlit Community Cloud), folder
+  `uploads/` hilang saat aplikasi di-restart. Dengan `DATABASE_URL` terisi, data pengguna
+  disalin ke database dan dipulihkan otomatis (lihat bagian Autentikasi); tanpa itu, datanya
+  hilang. Cadangan tetap tidak menggantikan unduhan berkala atau cadangan database.
 - Data contoh hanya untuk menguji fungsi. Untuk analisis dan kesimpulan penelitian,
   gunakan data dengan sumber, satuan, periode, dan cakupan wilayah yang dapat diverifikasi.

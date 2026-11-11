@@ -39,6 +39,11 @@ with tengah:
                 st.rerun()
 
     st.page_link(
+        "views/lupa_password.py",
+        label="Lupa password?",
+        icon=":material/lock_reset:",
+    )
+    st.page_link(
         "views/register.py",
         label="Belum punya akun? Daftar di sini",
         icon=":material/person_add:",

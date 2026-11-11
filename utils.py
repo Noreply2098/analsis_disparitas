@@ -12,18 +12,16 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+from storage import dir_cadangan, dir_data, path_dataset, path_metadata
+
 
 # ======================================================================
 # KONFIGURASI
 # ======================================================================
 
 BASE_DIR = Path(__file__).resolve().parent
-DATA_DIR = BASE_DIR / "uploads"
-BACKUP_DIR = DATA_DIR / "cadangan"
-DATASET_PATH = DATA_DIR / "dataset.csv"
-METADATA_PATH = DATA_DIR / "metadata.json"
-
-DATA_DIR.mkdir(exist_ok=True)
+# Data bersifat per pengguna: lokasi folder ditentukan saat dipanggil (lihat storage.py),
+# bukan konstanta, agar pengguna yang berbeda tidak pernah berbagi dataset.
 
 COL_WILAYAH = "Nama Wilayah"
 COL_TAHUN = "Tahun"
@@ -615,19 +613,19 @@ KOLOM_METADATA = ["sumber", "tautan", "tanggal_pengambilan", "satuan", "catatan_
 # ==============================
 
 def baca_metadata() -> dict:
-    if not METADATA_PATH.exists():
+    if not path_metadata().exists():
         return {}
     try:
-        return json.loads(METADATA_PATH.read_text(encoding="utf-8"))
+        return json.loads(path_metadata().read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
 
 
 def simpan_metadata(metadata: dict) -> None:
-    DATA_DIR.mkdir(exist_ok=True)
-    sementara = METADATA_PATH.with_suffix(".tmp")
+    dir_data().mkdir(exist_ok=True)
+    sementara = path_metadata().with_suffix(".tmp")
     sementara.write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
-    os.replace(sementara, METADATA_PATH)
+    os.replace(sementara, path_metadata())
 
 
 # ==============================
@@ -636,13 +634,13 @@ def simpan_metadata(metadata: dict) -> None:
 
 def load_dataset() -> tuple[pd.DataFrame | None, str | None]:
     """Baca dataset. Mengembalikan (DataFrame, None) atau (None, pesan_alasan)."""
-    if not DATASET_PATH.exists():
+    if not path_dataset().exists():
         return None, "Dataset belum tersedia. Silakan masukkan data terlebih dahulu."
 
     try:
         # Kode/provinsi adalah identitas (teks): "0101" tidak boleh menjadi 101 dan kolom
         # yang sebagian kosong tidak boleh berubah menjadi desimal.
-        df = pd.read_csv(DATASET_PATH, dtype={c: str for c in OPTIONAL_COLUMNS})
+        df = pd.read_csv(path_dataset(), dtype={c: str for c in OPTIONAL_COLUMNS})
     except Exception:
         return None, "Dataset tidak dapat dibaca. Silakan import ulang data."
 
@@ -692,31 +690,31 @@ def save_dataset(df: pd.DataFrame, alasan: str = "simpan", metadata: dict | None
     Bila penulisan atau verifikasi gagal, dataset sebelumnya dikembalikan dari cadangan
     dan ValueError dilempar; penyimpanan tidak pernah dilaporkan berhasil.
     """
-    DATA_DIR.mkdir(exist_ok=True)
+    dir_data().mkdir(exist_ok=True)
     kolom = kolom_dataset(df)
     maksud = df[kolom].reset_index(drop=True)
-    ada_sebelumnya = DATASET_PATH.exists()
-    meta_sebelumnya = METADATA_PATH.read_bytes() if METADATA_PATH.exists() else None
+    ada_sebelumnya = path_dataset().exists()
+    meta_sebelumnya = path_metadata().read_bytes() if path_metadata().exists() else None
     cadangan = buat_cadangan(alasan)
 
-    sementara = DATASET_PATH.with_suffix(".tmp")
+    sementara = path_dataset().with_suffix(".tmp")
 
     def kembalikan(pesan: str):
         """Kembalikan dataset dan metadata sebelumnya, lalu laporkan kegagalan."""
         sementara.unlink(missing_ok=True)
         if ada_sebelumnya and cadangan:
-            shutil.copyfile(BACKUP_DIR / cadangan, DATASET_PATH)
+            shutil.copyfile(dir_cadangan() / cadangan, path_dataset())
             if meta_sebelumnya is not None:
-                METADATA_PATH.write_bytes(meta_sebelumnya)
+                path_metadata().write_bytes(meta_sebelumnya)
             else:
-                METADATA_PATH.unlink(missing_ok=True)
+                path_metadata().unlink(missing_ok=True)
             raise ValueError(f"{pesan} Dataset sebelumnya dikembalikan dari cadangan.")
-        DATASET_PATH.unlink(missing_ok=True)
+        path_dataset().unlink(missing_ok=True)
         raise ValueError(f"{pesan} Dataset belum tersimpan.")
 
     try:
         maksud.to_csv(sementara, index=False, encoding="utf-8-sig")
-        os.replace(sementara, DATASET_PATH)
+        os.replace(sementara, path_dataset())
     except OSError as e:
         kembalikan(f"Gagal menulis dataset ({e}).")
 
@@ -739,10 +737,10 @@ def save_dataset(df: pd.DataFrame, alasan: str = "simpan", metadata: dict | None
 
 def delete_dataset() -> None:
     """Hapus dataset (cadangan dibuat lebih dulu sehingga bisa dipulihkan)."""
-    if DATASET_PATH.exists():
+    if path_dataset().exists():
         buat_cadangan("hapus")
-        DATASET_PATH.unlink()
-    METADATA_PATH.unlink(missing_ok=True)
+        path_dataset().unlink()
+    path_metadata().unlink(missing_ok=True)
 
 
 # ==============================
@@ -754,21 +752,21 @@ def buat_cadangan(alasan: str, lindungi: set[str] | None = None) -> str | None:
 
     lindungi: nama cadangan yang tidak boleh ikut dipangkas.
     """
-    if not DATASET_PATH.exists():
+    if not path_dataset().exists():
         return None
-    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    dir_cadangan().mkdir(parents=True, exist_ok=True)
     stempel = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    tujuan = BACKUP_DIR / f"dataset_{stempel}_{alasan}.csv"
-    shutil.copy2(DATASET_PATH, tujuan)
-    if METADATA_PATH.exists():
-        shutil.copy2(METADATA_PATH, tujuan.with_suffix(".json"))
+    tujuan = dir_cadangan() / f"dataset_{stempel}_{alasan}.csv"
+    shutil.copy2(path_dataset(), tujuan)
+    if path_metadata().exists():
+        shutil.copy2(path_metadata(), tujuan.with_suffix(".json"))
     _pangkas_cadangan(lindungi or set())
     return tujuan.name
 
 
 def _pangkas_cadangan(lindungi: set[str] | None = None) -> None:
     lindungi = lindungi or set()
-    berkas = sorted(BACKUP_DIR.glob("dataset_*.csv"), reverse=True)
+    berkas = sorted(dir_cadangan().glob("dataset_*.csv"), reverse=True)
     for lama in berkas[MAKS_CADANGAN:]:
         if lama.name in lindungi:
             continue
@@ -778,10 +776,10 @@ def _pangkas_cadangan(lindungi: set[str] | None = None) -> None:
 
 def daftar_cadangan() -> list[dict]:
     """Cadangan terbaru lebih dulu: nama berkas, waktu, alasan, dan jumlah baris."""
-    if not BACKUP_DIR.exists():
+    if not dir_cadangan().exists():
         return []
     hasil = []
-    for path in sorted(BACKUP_DIR.glob("dataset_*.csv"), reverse=True):
+    for path in sorted(dir_cadangan().glob("dataset_*.csv"), reverse=True):
         bagian = path.stem.split("_")  # dataset, tanggal, jam, mikrodetik, alasan
         try:
             waktu = datetime.strptime("_".join(bagian[1:4]), "%Y%m%d_%H%M%S_%f")
@@ -800,7 +798,7 @@ def daftar_cadangan() -> list[dict]:
 
 def periksa_cadangan(nama_berkas: str) -> pd.DataFrame:
     """Pastikan cadangan dapat dibaca dan berstruktur benar. Melempar ValueError bila tidak."""
-    sumber = BACKUP_DIR / os.path.basename(nama_berkas)
+    sumber = dir_cadangan() / os.path.basename(nama_berkas)
     if not sumber.exists():
         raise ValueError("Cadangan tidak ditemukan.")
     try:
@@ -820,31 +818,31 @@ def pulihkan(nama_berkas: str) -> None:
     baca ulang dan cocokkan dengan cadangan -> pulihkan metadata yang sesuai.
     Cadangan tidak pernah dihapus; bila gagal, kondisi sebelumnya dikembalikan.
     """
-    sumber = BACKUP_DIR / os.path.basename(nama_berkas)
+    sumber = dir_cadangan() / os.path.basename(nama_berkas)
     isi_cadangan = periksa_cadangan(nama_berkas)  # ditolak sebelum ada yang diubah
 
-    ada_sebelumnya = DATASET_PATH.exists()
-    meta_sebelumnya = METADATA_PATH.read_bytes() if METADATA_PATH.exists() else None
+    ada_sebelumnya = path_dataset().exists()
+    meta_sebelumnya = path_metadata().read_bytes() if path_metadata().exists() else None
     sebelum = buat_cadangan("sebelum-pulih", lindungi={sumber.name})
 
-    DATA_DIR.mkdir(exist_ok=True)
-    sementara = DATASET_PATH.with_suffix(".tmp")
+    dir_data().mkdir(exist_ok=True)
+    sementara = path_dataset().with_suffix(".tmp")
 
     def batalkan(pesan: str):
         sementara.unlink(missing_ok=True)
         if ada_sebelumnya and sebelum:
-            shutil.copyfile(BACKUP_DIR / sebelum, DATASET_PATH)
+            shutil.copyfile(dir_cadangan() / sebelum, path_dataset())
             if meta_sebelumnya is not None:
-                METADATA_PATH.write_bytes(meta_sebelumnya)
+                path_metadata().write_bytes(meta_sebelumnya)
             else:
-                METADATA_PATH.unlink(missing_ok=True)
+                path_metadata().unlink(missing_ok=True)
             raise ValueError(f"{pesan} Dataset sebelumnya dikembalikan; cadangan tetap tersimpan.")
-        DATASET_PATH.unlink(missing_ok=True)
+        path_dataset().unlink(missing_ok=True)
         raise ValueError(f"{pesan} Cadangan tetap tersimpan.")
 
     try:
         shutil.copyfile(sumber, sementara)
-        os.replace(sementara, DATASET_PATH)
+        os.replace(sementara, path_dataset())
     except OSError as e:
         batalkan(f"Gagal memulihkan dataset ({e}).")
 
@@ -853,7 +851,7 @@ def pulihkan(nama_berkas: str) -> None:
     if ulang is None:
         batalkan(f"Verifikasi gagal: dataset hasil pemulihan tidak dapat dibaca ({galat}).")
     perbedaan = _bandingkan_isi(isi_cadangan, ulang)
-    if perbedaan or DATASET_PATH.read_bytes() != sumber.read_bytes():
+    if perbedaan or path_dataset().read_bytes() != sumber.read_bytes():
         batalkan(f"Verifikasi gagal: isi dataset tidak sama dengan cadangan ({perbedaan or 'berkas berbeda'}).")
 
     # Metadata yang sesuai dengan cadangan tersebut.
@@ -865,7 +863,7 @@ def pulihkan(nama_berkas: str) -> None:
         except (OSError, ValueError):
             meta = None  # metadata cadangan rusak: dataset tetap dipulihkan tanpa catatan sumber
     if meta is None:
-        METADATA_PATH.unlink(missing_ok=True)
+        path_metadata().unlink(missing_ok=True)
     else:
         meta["jumlah_baris"] = len(ulang)  # selaraskan dengan isi dataset sebenarnya
         simpan_metadata(meta)
@@ -877,7 +875,7 @@ def pulihkan(nama_berkas: str) -> None:
 
 def info_dataset(df: pd.DataFrame) -> dict:
     tahun = pd.to_numeric(df[COL_TAHUN], errors="coerce").dropna().astype(int)
-    stat = DATASET_PATH.stat()
+    stat = path_dataset().stat()
     return {
         "baris": len(df),
         "wilayah": df[COL_WILAYAH].nunique(),

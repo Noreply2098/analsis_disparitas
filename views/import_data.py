@@ -9,7 +9,7 @@ from utils import (
     COL_PENDUDUK,
     COL_TAHUN,
     COL_WILAYAH,
-    DATASET_PATH,
+    path_dataset,
     MAKS_UKURAN_MB,
     OPTIONAL_COLUMNS,
     REQUIRED_COLUMNS,
@@ -275,7 +275,7 @@ with tab_upload:
         mode = "Ganti seluruh dataset"
         data_lama = None
         konfirmasi_ganti = True
-        if DATASET_PATH.exists():
+        if path_dataset().exists():
             mode = st.radio(
                 "Cara menyimpan",
                 ["Ganti seluruh dataset", "Tambahkan ke dataset yang ada"],
@@ -414,7 +414,7 @@ with tab_manual:
         baru = df_baru.copy()
         baru["Baris"] = np.arange(len(baru)) + 1
         baru["Asal"] = "Input baru"
-        data_lama, galat_lama = (data_lama_bersih() if DATASET_PATH.exists() else (None, None))
+        data_lama, galat_lama = (data_lama_bersih() if path_dataset().exists() else (None, None))
         if galat_lama:
             st.error(galat_lama)
             syarat_manual.append("perbaiki dataset yang ada")

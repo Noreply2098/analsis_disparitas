@@ -4,3 +4,5 @@ altair
 vl-convert-python
 openpyxl
 bcrypt>=4.1
+sqlalchemy>=2.0
+psycopg2-binary

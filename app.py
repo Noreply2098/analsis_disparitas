@@ -17,7 +17,7 @@ import streamlit as st
 # halaman selalu memakai file terbaru.
 # ------------------------------------------------------------------
 _FOLDER = Path(__file__).resolve().parent
-_MODUL_LOKAL = ("utils", "charts", "laporan", "auth")
+_MODUL_LOKAL = ("utils", "charts", "laporan", "storage", "auth", "mailer", "db")
 _cap_waktu = getattr(sys, "_ria_cap_waktu", {})
 _berubah = False
 for _nama in _MODUL_LOKAL:
@@ -28,11 +28,18 @@ for _nama in _MODUL_LOKAL:
             _cap_waktu[_nama] = _waktu
             _berubah = True
 if _berubah:
+    if "db" in sys.modules:
+        try:
+            sys.modules["db"].tutup_semua()  # lepas koneksi database lama dengan rapi
+        except Exception:
+            pass
     for _nama in _MODUL_LOKAL:
         sys.modules.pop(_nama, None)
 sys._ria_cap_waktu = _cap_waktu
 
 import auth  # noqa: E402  (harus setelah pembersihan modul lama di atas)
+import storage  # noqa: E402
+from sqlalchemy.exc import SQLAlchemyError  # noqa: E402
 
 st.set_page_config(
     page_title="Regional Income Analysis",
@@ -71,40 +78,58 @@ st.html(
     """
 )
 
+PESAN_DB = (
+    "Tidak dapat terhubung ke database akun. Coba muat ulang beberapa saat lagi; "
+    "bila terus terjadi, hubungi administrator aplikasi."
+)
+
+try:
+    auth.pulihkan_sesi()   # masuk otomatis dari cookie (mis. setelah refresh)
+    auth.segarkan_sesi()   # pastikan akun masih aktif dan peran terbaru
+    storage.siapkan_data() # pulihkan data pengguna dari database bila folder lokal kosong
+except SQLAlchemyError:
+    st.error(PESAN_DB)
+    st.stop()
+
 pengguna = auth.pengguna_aktif()
 
+menu = {
+    "MENU UTAMA": [
+        st.Page("views/dashboard.py", title="Dashboard",
+                icon=":material/dashboard:", default=True),
+        st.Page("views/import_data.py", title="Import Data BPS",
+                icon=":material/upload_file:", url_path="import-data"),
+        st.Page("views/data_pendapatan.py", title="Data Pendapatan",
+                icon=":material/table_chart:", url_path="data-pendapatan"),
+        st.Page("views/analisis.py", title="Analisis Disparitas",
+                icon=":material/calculate:", url_path="analisis"),
+        st.Page("views/visualisasi.py", title="Visualisasi",
+                icon=":material/bar_chart:", url_path="visualisasi"),
+        st.Page("views/tentang.py", title="Tentang Aplikasi",
+                icon=":material/info:", url_path="tentang"),
+    ],
+}
 if pengguna:
-    menu = {
-        "MENU UTAMA": [
-            st.Page("views/dashboard.py", title="Dashboard",
-                    icon=":material/dashboard:", default=True),
-            st.Page("views/import_data.py", title="Import Data BPS",
-                    icon=":material/upload_file:", url_path="import-data"),
-            st.Page("views/data_pendapatan.py", title="Data Pendapatan",
-                    icon=":material/table_chart:", url_path="data-pendapatan"),
-            st.Page("views/analisis.py", title="Analisis Disparitas",
-                    icon=":material/calculate:", url_path="analisis"),
-            st.Page("views/visualisasi.py", title="Visualisasi",
-                    icon=":material/bar_chart:", url_path="visualisasi"),
-            st.Page("views/tentang.py", title="Tentang Aplikasi",
-                    icon=":material/info:", url_path="tentang"),
-        ],
-        "AKUN": [
-            st.Page("views/akun.py", title="Akun Saya",
-                    icon=":material/account_circle:", url_path="akun"),
-        ],
-    }
-else:
-    # Pengguna yang belum masuk hanya bisa membuka Login dan Registrasi;
-    # halaman data tidak terdaftar sehingga tidak bisa diakses lewat URL.
-    menu = {
-        "AKUN": [
-            st.Page("views/login.py", title="Masuk",
-                    icon=":material/login:", url_path="login", default=True),
-            st.Page("views/register.py", title="Daftar",
-                    icon=":material/person_add:", url_path="register"),
+    menu["AKUN"] = [
+        st.Page("views/akun.py", title="Akun Saya",
+                icon=":material/account_circle:", url_path="akun"),
+    ]
+    if auth.adalah_admin():
+        menu["ADMINISTRASI"] = [
+            st.Page("views/kelola_pengguna.py", title="Kelola Pengguna",
+                    icon=":material/manage_accounts:", url_path="kelola-pengguna"),
         ]
-    }
+else:
+    # Aplikasi terbuka untuk tamu. Masuk/Daftar bersifat opsional: hanya pengguna yang
+    # masuk yang datanya tersimpan permanen.
+    menu["AKUN"] = [
+        st.Page("views/login.py", title="Masuk",
+                icon=":material/login:", url_path="login"),
+        st.Page("views/register.py", title="Daftar",
+                icon=":material/person_add:", url_path="register"),
+        st.Page("views/lupa_password.py", title="Lupa Password",
+                icon=":material/lock_reset:", url_path="lupa-password"),
+    ]
 
 halaman = st.navigation(menu)
 
@@ -117,7 +142,29 @@ with st.sidebar:
         if st.button("Keluar", icon=":material/logout:", key="btn_keluar_sidebar"):
             auth.keluar()
             st.rerun()
+        peringatan = st.session_state.get(storage.PERINGATAN_KEY)
+        if peringatan:
+            st.warning(peringatan)
     st.caption("Academic Research Project · Version 1.0")
 
+HALAMAN_AKUN = ("login", "register", "lupa-password")
+if not pengguna and halaman.url_path not in HALAMAN_AKUN:
+    st.info(
+        "**Mode tamu.** Data dan cadangan yang Anda buat hanya disimpan sementara di sesi "
+        "ini dan akan hilang saat halaman dimuat ulang atau ditutup. **Masuk atau daftar** "
+        "(menu AKUN di sidebar) agar data tersimpan permanen.",
+        icon=":material/lock_open:",
+    )
+
 auth.tampilkan_toast()
-halaman.run()
+auth.terapkan_cookie()  # tulis/hapus cookie sesi di browser bila ada yang tertunda
+
+try:
+    halaman.run()
+except SQLAlchemyError:
+    st.error(PESAN_DB)
+finally:
+    try:
+        storage.sinkronkan_data()  # simpan perubahan data pengguna ke database
+    except SQLAlchemyError:
+        pass
