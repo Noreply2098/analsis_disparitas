@@ -38,6 +38,7 @@ if _berubah:
 sys._ria_cap_waktu = _cap_waktu
 
 import auth  # noqa: E402  (harus setelah pembersihan modul lama di atas)
+import db  # noqa: E402
 import storage  # noqa: E402
 from sqlalchemy.exc import SQLAlchemyError  # noqa: E402
 
@@ -83,12 +84,25 @@ PESAN_DB = (
     "bila terus terjadi, hubungi administrator aplikasi."
 )
 
+
+def tampilkan_galat_db(exc: Exception) -> None:
+    """Catat galat database ke log (tanpa password) dan beri petunjuk penyebabnya.
+
+    Detail teknis hanya ditampilkan di layar bila secret DEBUG_DB = "true"."""
+    detail = db.samarkan(f"{type(exc).__name__}: {exc}")
+    print(f"[RIA] Galat database: {detail}", file=sys.stderr, flush=True)
+    st.error(PESAN_DB)
+    st.info("**Petunjuk untuk pemilik aplikasi:** " + db.petunjuk_galat(exc), icon=":material/build:")
+    if str(db.config("DEBUG_DB", "")).strip().lower() in ("1", "true", "ya", "yes"):
+        st.code(detail, language=None)
+
+
 try:
     auth.pulihkan_sesi()   # masuk otomatis dari cookie (mis. setelah refresh)
     auth.segarkan_sesi()   # pastikan akun masih aktif dan peran terbaru
     storage.siapkan_data() # pulihkan data pengguna dari database bila folder lokal kosong
-except SQLAlchemyError:
-    st.error(PESAN_DB)
+except SQLAlchemyError as exc:
+    tampilkan_galat_db(exc)
     st.stop()
 
 pengguna = auth.pengguna_aktif()
@@ -161,8 +175,8 @@ auth.terapkan_cookie()  # tulis/hapus cookie sesi di browser bila ada yang tertu
 
 try:
     halaman.run()
-except SQLAlchemyError:
-    st.error(PESAN_DB)
+except SQLAlchemyError as exc:
+    tampilkan_galat_db(exc)
 finally:
     try:
         storage.sinkronkan_data()  # simpan perubahan data pengguna ke database

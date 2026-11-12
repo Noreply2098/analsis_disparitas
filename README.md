@@ -81,6 +81,22 @@ Langkah di Streamlit Community Cloud:
 3. Reboot aplikasi, lalu **segera daftarkan akun pertama**: akun pertama otomatis menjadi
    Administrator.
 
+**Muncul "Tidak dapat terhubung ke database akun"?** Aplikasi menampilkan *Petunjuk untuk pemilik
+aplikasi* di bawah pesan itu, dan galat lengkapnya (password sudah disamarkan) tercatat di log
+(*Manage app*). Penyebab yang paling sering:
+- **Supabase, koneksi langsung (`db.xxxx.supabase.co`)**: hanya IPv6 dan tidak terjangkau dari
+  Streamlit Cloud. Pakai connection string **Session pooler** (`aws-0-REGION.pooler.supabase.com`,
+  username `postgres.KODE_PROYEK`).
+- **`[YOUR-PASSWORD]` belum diganti** dengan password asli (tanda kurungnya ikut dihapus).
+- **Password mengandung karakter khusus** (`@ # / ? % :`): ganti password database dengan huruf dan
+  angka saja, atau tulis dalam bentuk URL-encoded (`@` menjadi `%40`).
+- **Tulisan contoh** (`HOST`, `USER`, `PASSWORD`) belum diganti, atau nilai tidak diapit tanda kutip.
+- `requirements.txt` di GitHub belum berisi `sqlalchemy` dan `psycopg2-binary`.
+
+Uji `DATABASE_URL` dari komputer sebelum menempelnya ke Secrets:
+`DATABASE_URL="postgresql://..." python kelola_akun.py cek-db`. Untuk menampilkan galat teknis di
+layar (sementara, saat memecahkan masalah), isi secret `DEBUG_DB = "true"`, lalu hapus lagi.
+
 ### Sesi bertahan saat halaman di-refresh (cookie)
 Setelah masuk, server membuat token acak dan menyimpannya di cookie `ria_sesi` (berlaku 7 hari,
 `SameSite=Lax`, plus `Secure` di HTTPS). Database hanya menyimpan **hash sha256** token, jadi

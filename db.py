@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
 import sqlalchemy as sa
@@ -125,7 +126,18 @@ def pakai_postgres() -> bool:
 _ENGINES: dict[str, sa.Engine] = {}
 
 
+class GalatDatabase(sa.exc.SQLAlchemyError):
+    """Galat konfigurasi database (mis. driver belum terpasang)."""
+
+
 def _buat_engine(url: str) -> sa.Engine:
+    try:
+        return _buat_engine_inti(url)
+    except ModuleNotFoundError as e:
+        raise GalatDatabase(f"Driver database belum terpasang: {e}") from e
+
+
+def _buat_engine_inti(url: str) -> sa.Engine:
     if url.startswith("sqlite"):
         eng = sa.create_engine(url, connect_args={"timeout": 10})
 
@@ -152,3 +164,67 @@ def tutup_semua() -> None:
     for eng in _ENGINES.values():
         eng.dispose()
     _ENGINES.clear()
+
+
+# ======================================================================
+# DIAGNOSIS GALAT KONEKSI
+# ======================================================================
+
+def samarkan(teks: str) -> str:
+    """Hilangkan password DATABASE_URL dari teks (log dan layar tidak boleh membocorkannya).
+
+    Password yang mengandung karakter khusus (@ # / ...) bisa terbelah saat URL diurai
+    sehingga sebagian terbaca sebagai nama host; karena itu potongan akhirnya juga disamarkan."""
+    hasil = str(teks)
+    url = config("DATABASE_URL") or ""
+    if "://" in url and "@" in url:
+        info = url.split("://", 1)[1].rsplit("@", 1)[0]
+        sandi = info.split(":", 1)[1] if ":" in info else ""
+        for awal in range(len(sandi)):  # dari password utuh sampai potongan akhir >= 3 karakter
+            potongan = sandi[awal:]
+            if len(potongan) < 3:
+                break
+            hasil = hasil.replace(potongan, "***")
+    # Nama host yang berisi karakter khusus pasti hasil salah urai (bagian dari password).
+    hasil = re.sub(r'(host name )"[^"]*[@#/?%:][^"]*"', r'\1"***"', hasil)
+    return re.sub(r"(://[^:/@\s]+:)[^@\s'\"]+@", r"\1***@", hasil)
+
+
+def petunjuk_galat(exc: BaseException) -> str:
+    """Penjelasan singkat (Indonesia) penyebab paling mungkin dari galat koneksi database."""
+    teks = str(exc)
+    rendah = teks.lower()
+    host = re.search(r'could not translate host name "([^"]*)"', teks)
+
+    if "driver database belum terpasang" in rendah:
+        return ("Paket driver PostgreSQL belum terpasang. Pastikan requirements.txt di GitHub "
+                "berisi `sqlalchemy` dan `psycopg2-binary`, lalu Reboot aplikasi.")
+    if isinstance(exc, sa.exc.ArgumentError) or "could not parse" in rendah:
+        return ("Format DATABASE_URL tidak valid. Bentuk yang benar: "
+                "`postgresql://USER:PASSWORD@HOST:5432/NAMA_DB` dan nilainya diapit tanda kutip.")
+    if host and re.search(r"[@#/?%:]", host.group(1)):
+        return ("Password di DATABASE_URL kemungkinan mengandung karakter khusus (@ # / ? % :) "
+                "sehingga URL terbaca salah. Ganti password database dengan huruf dan angka saja, "
+                "atau tulis karakter khusus dalam bentuk URL-encoded (mis. @ menjadi %40).")
+    if host:
+        return (f"Alamat server database ('{host.group(1)}') tidak ditemukan. Pastikan bagian HOST "
+                "diisi alamat asli dari penyedia database, bukan tulisan contoh, dan ejaannya benar.")
+    if "network is unreachable" in rendah or "cannot assign requested address" in rendah:
+        return ("Server database tidak terjangkau dari Streamlit Cloud. Pada Supabase, koneksi langsung "
+                "(db.xxxx.supabase.co) hanya IPv6; pakai connection string **Session pooler** "
+                "(host *.pooler.supabase.com) atau database Neon.")
+    if "tenant or user not found" in rendah:
+        return "Pada pooler Supabase, username harus berbentuk `postgres.KODE_PROYEK`, bukan `postgres` saja."
+    if "password authentication failed" in rendah:
+        return ("Username atau password database salah. Pastikan password asli sudah menggantikan "
+                "tulisan [YOUR-PASSWORD] (termasuk tanda kurungnya).")
+    if "database" in rendah and "does not exist" in rendah:
+        return "Nama database di akhir URL tidak ada (pada Supabase biasanya `postgres`)."
+    if "ssl" in rendah:
+        return "Server mewajibkan SSL: tambahkan `?sslmode=require` di akhir DATABASE_URL."
+    if "timeout" in rendah or "timed out" in rendah:
+        return ("Koneksi ke database habis waktu. Database gratis bisa sedang 'tidur' (coba muat ulang) "
+                "atau diblokir pembatasan IP di penyedia database.")
+    if "connection refused" in rendah:
+        return "Server menolak koneksi: periksa HOST dan PORT (umumnya 5432; pooler transaksi 6543)."
+    return "Periksa kembali nilai DATABASE_URL di Secrets, lalu lihat log aplikasi (Manage app) untuk detailnya."

@@ -875,3 +875,74 @@ def test_cli_kode_reset(backend, capsys):
     kode = re.search(r"([A-Z2-9]{4}-[A-Z2-9]{4})", capsys.readouterr().out).group(1)
     assert auth.reset_password_dengan_kode("budi@contoh.com", kode, "baru12345", "baru12345") == []
     assert kelola_akun.kode_reset("tidak_ada") == 1
+
+
+# ======================================================================
+# DIAGNOSIS GALAT DATABASE
+# ======================================================================
+
+def _op(pesan):
+    return sa.exc.OperationalError("SELECT 1", {}, Exception(pesan))
+
+
+@pytest.mark.parametrize("galat, kata", [
+    (_op('could not translate host name "ss#w0rd@db.x.supabase.co" to address'), "karakter khusus"),
+    (_op('could not translate host name "HOST" to address: Name or service not known'), "'HOST'"),
+    (_op('connection to server at "db.x.supabase.co" (2406::1), port 5432 failed: Network is unreachable'), "Session pooler"),
+    (_op('FATAL:  password authentication failed for user "postgres"'), "[YOUR-PASSWORD]"),
+    (_op("FATAL:  Tenant or user not found"), "postgres.KODE_PROYEK"),
+    (_op('FATAL:  database "xyz" does not exist'), "Nama database"),
+    (_op('connection to server at "1.2.3.4", port 5432 failed: Connection refused'), "HOST dan PORT"),
+    (_op("connection timed out"), "habis waktu"),
+    (_op("server requires SSL"), "sslmode=require"),
+    (sa.exc.ArgumentError("Could not parse SQLAlchemy URL from given URL string"), "Format DATABASE_URL"),
+    (db.GalatDatabase("Driver database belum terpasang: No module named 'psycopg2'"), "psycopg2-binary"),
+    (_op("sesuatu yang aneh"), "Secrets"),
+])
+def test_petunjuk_galat_database(galat, kata):
+    assert kata in db.petunjuk_galat(galat)
+
+
+def test_password_tidak_pernah_bocor_di_log_atau_layar(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "postgresql://postgres:RahasiaSuper99@db.x.co:5432/postgres")
+    teks = ("(psycopg2.OperationalError) connection failed for "
+            "postgresql://postgres:RahasiaSuper99@db.x.co:5432/postgres; sandi RahasiaSuper99")
+    aman = db.samarkan(teks)
+    assert "RahasiaSuper99" not in aman and "***" in aman
+    # URL yang tidak bisa diurai (password mengandung @) juga disamarkan
+    monkeypatch.setenv("DATABASE_URL", "postgresql://postgres:pa@ss#w0rd9@db.x.co:5432/postgres")
+    assert "pa@ss#w0rd9" not in db.samarkan("Could not parse 'postgresql://postgres:pa@ss#w0rd9@db.x.co:5432/postgres'")
+    # Password terbelah saat URL diurai: potongannya muncul sebagai "nama host"
+    galat = 'could not translate host name "ss#w0rd9@db.x.co" to address: Name or service not known'
+    aman = db.samarkan(galat)
+    assert "w0rd9" not in aman and "ss#w0rd9" not in aman
+
+
+def test_driver_tidak_terpasang_menjadi_galat_database(monkeypatch):
+    monkeypatch.setattr(db, "_buat_engine_inti", lambda url: (_ for _ in ()).throw(ModuleNotFoundError("psycopg2")))
+    with pytest.raises(db.GalatDatabase):
+        db._buat_engine("postgresql+psycopg2://u:p@h/d")
+
+
+def test_ui_galat_database_memberi_petunjuk_tanpa_membocorkan_password(db_sqlite, monkeypatch):
+    from streamlit.testing.v1 import AppTest
+
+    monkeypatch.setenv("DATABASE_URL", "postgresql://postgres:RahasiaSuper99@127.0.0.1:1/tidak_ada")
+    at = AppTest.from_file(str(RAIZ / "app.py"), default_timeout=60).run()
+    at.switch_page("views/register.py").run()
+    semua = " ".join([e.value for e in at.error] + [i.value for i in at.info] + [c.value for c in at.code])
+    assert "Tidak dapat terhubung ke database" in semua
+    assert "Petunjuk untuk pemilik aplikasi" in semua and "HOST dan PORT" in semua
+    assert "RahasiaSuper99" not in semua and not at.code  # detail teknis tersembunyi secara bawaan
+
+    monkeypatch.setenv("DEBUG_DB", "true")
+    at = AppTest.from_file(str(RAIZ / "app.py"), default_timeout=60).run()
+    at.switch_page("views/register.py").run()
+    assert at.code and "OperationalError" in at.code[-1].value
+    assert "RahasiaSuper99" not in at.code[-1].value
+
+
+def test_cli_cek_db(backend, capsys):
+    import kelola_akun
+    assert kelola_akun.cek_db() == 0
+    assert "BERHASIL" in capsys.readouterr().out
