@@ -1,3 +1,0 @@
-pytest
-aiosmtpd
-pgserver   # opsional: menjalankan pengujian di PostgreSQL sungguhan
