@@ -11,14 +11,21 @@ from utils import (
 # ==============================
 # GAYA GRAFIK
 # ==============================
-BIRU_TUA = "#1F5F9E"
-BIRU = "#2874B8"
-BIRU_MUDA = "#6FB1EC"
-TEKS = "#26364a"
-TEKS_PUDAR = "#5b6b7f"
-ORANYE = "#E07A1F"
+# Palet NEON (nama konstanta dipertahankan agar impor di modul lain tetap berfungsi):
+#   BIRU_TUA = magenta neon (nilai tertinggi / aksen utama)
+#   BIRU     = cyan neon (garis & nilai di atas rata-rata)
+#   BIRU_MUDA= cyan terang (batang biasa / awal gradasi)
+#   ORANYE   = kuning neon (nilai terendah / garis rata-rata)
+BIRU_TUA = "#ff2bd6"
+BIRU = "#00f0ff"
+BIRU_MUDA = "#00e5ff"
+TEKS = "#eae6ff"
+TEKS_PUDAR = "#a79bd6"
+ORANYE = "#ffe600"
+LATAR = "#07021a"
+GARIS_PUDAR = "#8a7fbf"
 
-HIJAU_PITA, KUNING_PITA, MERAH_PITA = "#2e9e5b", "#e6a817", "#d64545"
+HIJAU_PITA, KUNING_PITA, MERAH_PITA = "#39ff14", "#ffe600", "#ff2b6b"
 
 # Nama panjang dipecah ke beberapa baris (pemisah \n) agar tidak terpotong di layar kecil
 LABEL_WILAYAH = "split(datum.label, '\\n')"
@@ -38,7 +45,8 @@ def gaya(grafik):
             labelFontSize=12,
             titleFontSize=12,
             titleFontWeight="normal",
-            gridColor="#e6ecf3",
+            gridColor="#2a1a5e",
+            gridOpacity=0.8,
         )
     )
 
@@ -212,8 +220,8 @@ def grafik_selisih(data, kolom_selisih="Selisih", kolom_posisi="Posisi", langkah
     skala_x = alt.Scale(domain=[-m if m > 0 else -1, m if m > 0 else 1], nice=False)
 
     urutan = ["Di atas rata-rata", "Di bawah rata-rata", "Sama dengan rata-rata"]
-    warna = {"Di atas rata-rata": BIRU, "Di bawah rata-rata": ORANYE,
-             "Sama dengan rata-rata": "#9aa7b6"}
+    warna = {"Di atas rata-rata": BIRU, "Di bawah rata-rata": BIRU_TUA,
+             "Sama dengan rata-rata": GARIS_PUDAR}
     ada = [p for p in urutan if p in set(d[kolom_posisi])]
 
     dasar = alt.Chart(d).encode(
@@ -236,7 +244,7 @@ def grafik_selisih(data, kolom_selisih="Selisih", kolom_posisi="Posisi", langkah
 
     nol = (
         alt.Chart(d)
-        .mark_rule(color="#9aa7b6", strokeWidth=1.5)
+        .mark_rule(color=GARIS_PUDAR, strokeWidth=1.5)
         .encode(x=alt.X("Nol:Q", scale=skala_x, axis=None, stack=None))
     )
 
@@ -268,7 +276,7 @@ def grafik_indikator(indeks):
     })
     kategori = ["Rendah", "Sedang", "Tinggi"]
     skala_warna = alt.Scale(
-        domain=kategori, range=["#a8dcbc", "#f6dc93", "#f2aaaa"]
+        domain=kategori, range=["#2dffb0", "#ffe14d", "#ff7aa8"]
     )
 
     rect = (
@@ -283,7 +291,7 @@ def grafik_indikator(indeks):
     )
     nama = (
         alt.Chart(pita)
-        .mark_text(fontSize=12, fontWeight=600, color="#3d4b5c")
+        .mark_text(fontSize=12, fontWeight=700, color=LATAR)
         .encode(
             x=alt.X("tengah:Q", scale=skala, axis=None),
             y=alt.value(52), text="Kategori:N",
@@ -296,17 +304,17 @@ def grafik_indikator(indeks):
 
     garis = (
         alt.Chart(penanda)
-        .mark_rule(color=TEKS, strokeWidth=3)
+        .mark_rule(color=LATAR, strokeWidth=3)
         .encode(x=alt.X("iw:Q", scale=skala, axis=None), y=alt.value(28), y2=alt.value(76))
     )
     segitiga = (
         alt.Chart(penanda)
-        .mark_point(shape="triangle-down", filled=True, color=TEKS, size=110)
+        .mark_point(shape="triangle-down", filled=True, color="#ffffff", size=110)
         .encode(x=alt.X("iw:Q", scale=skala, axis=None), y=alt.value(22))
     )
     nilai = (
         alt.Chart(penanda)
-        .mark_text(fontSize=14, fontWeight=700, color=TEKS, align=rata, baseline="bottom", dy=-2)
+        .mark_text(fontSize=14, fontWeight=700, color="#ffffff", align=rata, baseline="bottom", dy=-2)
         .encode(
             x=alt.X("iw:Q", scale=skala, axis=None),
             y=alt.value(12),
@@ -332,7 +340,7 @@ def grafik_tren(tren):
             "atas": [0.3, 0.5, ymax],
             "Kategori": kategori,
         }))
-        .mark_rect(opacity=0.13)
+        .mark_rect(opacity=0.18)
         .encode(
             y=alt.Y("bawah:Q", scale=skala_y),
             y2="atas:Q",
@@ -353,14 +361,14 @@ def grafik_tren(tren):
 
     isi = alt.Gradient(
         gradient="linear",
-        stops=[alt.GradientStop(color="rgba(40,116,184,0.35)", offset=0),
-               alt.GradientStop(color="rgba(40,116,184,0.03)", offset=1)],
+        stops=[alt.GradientStop(color="rgba(0,240,255,0.45)", offset=0),
+               alt.GradientStop(color="rgba(255,43,214,0.04)", offset=1)],
         x1=1, x2=1, y1=0, y2=1,
     )
     area = dasar.mark_area(color=isi)
     garis = dasar.mark_line(color=BIRU, strokeWidth=3)
     titik = dasar.mark_point(
-        filled=True, color=BIRU, size=130, stroke="white", strokeWidth=2,
+        filled=True, color=BIRU_TUA, size=130, stroke=BIRU, strokeWidth=2.5,
         opacity=1,
     ).encode(
         tooltip=[

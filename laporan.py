@@ -83,64 +83,66 @@ def _gambar(chart, lebar: int, judul: str | None = None, ket: str | None = None)
 CSS = """
 @page { size: A4; margin: 12mm 12mm 16mm 12mm; }
 * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-html { background: #e9eef5; }
+html { background: #0b0328; }
 body { margin: 0; font-family: "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
        color: #26364a; font-size: 10.5pt; line-height: 1.45; }
 .toolbar { position: sticky; top: 0; z-index: 10; display: flex; gap: 8px; flex-wrap: wrap;
-           align-items: center; justify-content: space-between; background: #173b65;
-           color: #fff; padding: 10px 16px; }
+           align-items: center; justify-content: space-between; background: linear-gradient(90deg, #1b0a3c, #4a0a63); border-bottom: 2px solid #00f0ff;
+           box-shadow: 0 0 18px rgba(0,240,255,.7); color: #fff; padding: 10px 16px; }
 .toolbar button { border: 0; border-radius: 6px; padding: 8px 16px; font-size: 14px;
-                  cursor: pointer; background: #2874B8; color: #fff; font-weight: 600; }
+                  cursor: pointer; background: linear-gradient(90deg, #ff2bd6, #9d4dff); color: #fff; font-weight: 700;
+                  box-shadow: 0 0 12px rgba(255,43,214,.9); }
 .toolbar button.sekunder { background: rgba(255,255,255,.15); }
 .toolbar span { font-size: 13px; opacity: .9; }
 .halaman { max-width: 210mm; margin: 16px auto; background: #fff; padding: 12mm;
-           box-shadow: 0 2px 12px rgba(0,0,0,.15); }
+           box-shadow: 0 0 28px rgba(255,43,214,.5), 0 0 60px rgba(0,240,255,.25); }
 .kop { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px;
-       border-bottom: 3px solid #2874B8; padding-bottom: 8px; margin-bottom: 14px; }
-.kop .judul { font-size: 17pt; font-weight: 700; color: #173b65; line-height: 1.2; }
+       border-bottom: 3px solid #ff2bd6; padding-bottom: 8px; margin-bottom: 14px; }
+.kop .judul { font-size: 17pt; font-weight: 700; color: #1b0a3c; line-height: 1.2; }
 .kop .sub { font-size: 10pt; color: #5b6b7f; margin-top: 2px; }
 .kop .tgl { font-size: 9pt; color: #5b6b7f; text-align: right; white-space: nowrap; }
-h1.bagian { font-size: 13pt; color: #fff; background: #173b65; padding: 6px 12px;
+h1.bagian { font-size: 13pt; color: #fff; background: #1b0a3c; padding: 6px 12px;
             border-radius: 4px; margin: 18px 0 10px; break-after: avoid; }
-h2 { font-size: 12.5pt; color: #173b65; margin: 16px 0 8px; padding-left: 8px;
-     border-left: 4px solid #2874B8; break-after: avoid; }
+h2 { font-size: 12.5pt; color: #1b0a3c; margin: 16px 0 8px; padding-left: 8px;
+     border-left: 4px solid #ff2bd6; break-after: avoid; }
 h3 { font-size: 10.5pt; margin: 0 0 4px; color: #26364a; break-after: avoid; }
 p { margin: 6px 0; }
 .ket, figcaption { font-size: 8.5pt; color: #5b6b7f; margin-top: 4px; }
 .hasil { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 6px; }
-.hasil .angka { font-size: 30pt; font-weight: 700; color: #173b65; line-height: 1; }
+.hasil .angka { font-size: 30pt; font-weight: 700; color: #1b0a3c; line-height: 1; }
 .hasil .delta { font-size: 9.5pt; color: #5b6b7f; }
 .status { padding: 6px 12px; border-radius: 6px; font-weight: 600; font-size: 10.5pt; }
 .status-rendah { background: #dff0e6; color: #1e6b3f; }
 .status-sedang { background: #fbf0cf; color: #8a6200; }
 .status-tinggi { background: #f8dcdc; color: #a12b2b; }
 .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
-.sel { border: 1px solid #d5deea; border-radius: 6px; padding: 6px 10px; break-inside: avoid; }
+.sel { border: 1px solid #d9c8ff; border-radius: 6px; padding: 6px 10px; break-inside: avoid; }
 .sel .l { font-size: 8.5pt; color: #5b6b7f; }
-.sel .v { font-size: 12.5pt; font-weight: 700; color: #173b65; overflow-wrap: anywhere; }
+.sel .v { font-size: 12.5pt; font-weight: 700; color: #1b0a3c; overflow-wrap: anywhere; }
 .sel .s { font-size: 8.5pt; color: #5b6b7f; }
 figure.gambar { margin: 8px 0 12px; break-inside: avoid; text-align: center; }
 figure.gambar h3 { text-align: left; }
 figure.gambar svg { max-width: 100%; height: auto; }
 figure.gambar figcaption { text-align: left; }
 table { width: 100%; border-collapse: collapse; font-size: 7.4pt; }
-th, td { border: 1px solid #cfd8e4; padding: 3px 4px; text-align: right; white-space: nowrap; }
+th, td { border: 1px solid #d9c8ff; padding: 3px 4px; text-align: right; white-space: nowrap; }
 td.t, th.t { white-space: normal; min-width: 70px; }
 th { white-space: normal; }
-th { background: #eaf1f9; color: #173b65; font-weight: 700; text-align: center; }
+th { background: #efe6ff; color: #1b0a3c; font-weight: 700; text-align: center; }
 td.t, th.t { text-align: left; }
 thead { display: table-header-group; }
 tfoot { display: table-row-group; }
-tfoot td { font-weight: 700; background: #f4f7fb; }
+tfoot td { font-weight: 700; background: #f6f0ff; }
 tr { break-inside: avoid; }
 ol.langkah { padding-left: 18px; margin: 6px 0; }
 ol.langkah li { margin-bottom: 7px; break-inside: avoid; }
-ol.langkah .hasilnya { color: #173b65; font-weight: 700; }
-.rumus { background: #f4f7fb; border: 1px solid #d5deea; border-radius: 6px;
+ol.langkah .hasilnya { color: #1b0a3c; font-weight: 700; }
+.rumus { background: #f6f0ff; border: 1px solid #d9c8ff; border-radius: 6px;
          padding: 8px 12px; margin: 6px 0; font-size: 10pt; }
 .catatan { background: #fbf0cf; border: 1px solid #ecd48a; border-radius: 6px; padding: 8px 12px; }
-.footer { margin-top: 18px; padding-top: 6px; border-top: 1px solid #d5deea;
+.footer { margin-top: 18px; padding-top: 6px; border-top: 1px solid #d9c8ff;
           font-size: 8pt; color: #7b8896; text-align: center; }
+figure.gambar svg { background: #07021a; border-radius: 10px; padding: 6px; max-width: 100%; height: auto; }
 @media print {
   html { background: #fff; }
   .toolbar { display: none; }
@@ -406,10 +408,13 @@ def dokumen_cetak(
 _TEMPLATE_TOMBOL = """
 <style>
   html, body { margin: 0; background: transparent; }
-  button { width: 100%; height: 42px; border-radius: 8px; cursor: pointer;
-           font: 600 15px "Source Sans Pro", "Segoe UI", Roboto, Arial, sans-serif;
-           border: 1px solid __BORDER__; background: __BG__; color: __FG__; }
-  button:hover { filter: brightness(0.96); }
+  button { width: 100%; height: 42px; border-radius: 10px; cursor: pointer;
+           font: 700 14px "Orbitron", "Segoe UI", Roboto, Arial, sans-serif;
+           letter-spacing: .06em; text-transform: uppercase;
+           border: 1px solid __BORDER__; background: __BG__; color: __FG__;
+           box-shadow: 0 0 12px __BORDER__; text-shadow: 0 0 6px __FG__;
+           transition: all .18s ease; }
+  button:hover { filter: brightness(1.2); box-shadow: 0 0 24px __BORDER__; transform: translateY(-1px); }
 </style>
 <button id="b" type="button">__LABEL__</button>
 <script>
@@ -435,7 +440,8 @@ def tombol_cetak(label: str, dokumen_html: str, utama: bool = False) -> None:
     """Tombol yang membuka dokumen cetak di jendela baru dan memanggil dialog cetak."""
     data = json.dumps(dokumen_html).replace("</", "<\\/")
     gaya = (
-        ("#2874B8", "#2874B8", "#ffffff") if utama else ("rgba(49,51,63,0.25)", "#ffffff", "#26364a")
+        ("#ff2bd6", "linear-gradient(90deg,#ff2bd6,#9d4dff,#00f0ff)", "#ffffff")
+        if utama else ("#00f0ff", "#0b0328", "#00f0ff")
     )
     isi = (
         _TEMPLATE_TOMBOL

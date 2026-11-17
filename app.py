@@ -17,7 +17,7 @@ import streamlit as st
 # halaman selalu memakai file terbaru.
 # ------------------------------------------------------------------
 _FOLDER = Path(__file__).resolve().parent
-_MODUL_LOKAL = ("utils", "charts", "laporan", "storage", "auth", "mailer", "db")
+_MODUL_LOKAL = ("utils", "charts", "laporan", "storage", "auth", "mailer", "db", "tema")
 _cap_waktu = getattr(sys, "_ria_cap_waktu", {})
 _berubah = False
 for _nama in _MODUL_LOKAL:
@@ -40,6 +40,7 @@ sys._ria_cap_waktu = _cap_waktu
 import auth  # noqa: E402  (harus setelah pembersihan modul lama di atas)
 import db  # noqa: E402
 import storage  # noqa: E402
+import tema  # noqa: E402
 from sqlalchemy.exc import SQLAlchemyError  # noqa: E402
 
 st.set_page_config(
@@ -47,6 +48,8 @@ st.set_page_config(
     page_icon="📊",
     layout="wide",
 )
+
+tema.terapkan()  # tema neon futuristik (CSS global)
 
 st.html(
     """
